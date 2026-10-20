@@ -135,17 +135,23 @@ Flags: `1` ack present, `2` message part present, `4` more parts follow, `8` com
 `16` do not acknowledge. Numbers are varints (usually 1–2 bytes).
 
 - **Ack** — "got everything up to N" plus a bitmap of the 32 parts after it; it rides along
-  in any packet. A standalone ack is sent only if there is nothing to send for 40 ms.
-- **Retransmission** — not acknowledged in time (starting at 250 ms, doubling up to 1 s) —
-  resend, on the next live road if this one is silent. Parts after a gap already arrived —
-  resend the gap at once (fast retransmit).
-- **Long messages** — in packet-sized parts, flag `4` on all but the last; at most 32 parts
-  in flight without acknowledgement.
+  in any packet. As in TCP, a standalone ack goes at once for every second part and for
+  anything out of order; a lone part waits up to 40 ms for a reply to ride on.
+- **Retransmission** — the timeout follows the measured round trip (RFC 6298: smoothed RTT
+  plus four deviations, 50 ms – 4 s, 500 ms before the first sample) plus the time the link
+  needs for the parts queued ahead, doubling on every retry; resend on the next live road if
+  this one is silent. Three parts past a gap — resend the gap at once (fast retransmit).
+- **Congestion control** — the window starts at 32 parts and doubles every round trip (slow
+  start) until the round trip grows noticeably above its minimum (a queue is building) or a
+  loss halves it (never below 32). While a queue builds, at most twice the bandwidth-delay
+  product is in flight, the bandwidth being measured from acks (as in BBR).
+- **Long messages** — in packet-sized parts, flag `4` on all but the last.
 - **Keepalive** — a flags-only packet (26 bytes), every 25 s on every quiet road (keeps NAT
   mappings open).
 - **Compression** — zstd **with a dictionary**. Plain compression gains nothing on short
   texts; a dictionary of frequent words and fragments (natural language, code, agent replies)
-  compresses even short messages 2–4×. Messages under 64 bytes are not compressed.
+  compresses even short messages 2–4×. Messages under 64 bytes are not compressed; from
+  32 KB on, a faster level is used (the best one costs more time than the bytes it saves).
   - Two kinds of dictionaries: **common** — published with the spec, trained on open texts,
     the same for everyone; **family** — one per family, published by the parent
     (`family.md` §6). A device never trains its own — dictionaries would diverge.
