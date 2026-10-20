@@ -49,7 +49,7 @@ conversations, and over a real network (a laptop to a cloud server). Every messa
 for integrity; every number can be reproduced and every scenario changed. On the real network
 P2PACT opens a conversation 2–4× faster than the others, is the best or level with the best
 under load, and level or faster on huge messages.
-[Latest results](https://github.com/p2pact/p2pact-tests/blob/main/results/RESULTS.md).
+[Summary](https://github.com/p2pact/p2pact-tests/blob/main/SUMMARY.md).
 
 ## How it compares
 
