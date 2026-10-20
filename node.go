@@ -60,8 +60,15 @@ type handshake struct {
 	invite *Invite // pairing: their invite (we join) or ours (they join)
 	done   chan error
 	at     time.Time
+	// data that overtook the handshake reply (reordering): run once the session is up
+	early []earlyPacket
 	// pairing, we respond: the joiner's index from its first packet
 	remoteIdx uint32
+}
+
+type earlyPacket struct {
+	pkt  []byte
+	from Endpoint
 }
 
 type epState struct {
@@ -104,6 +111,8 @@ type Node struct {
 	OnPaired func(p Peer)
 	// OnHello is called when a known device sends its hello (new session or pairing).
 	OnHello func(peer string)
+	// NoCompression turns compression off for what we send (benchmarks, debugging).
+	NoCompression bool
 	// AllowDict decides whether a known device may fetch a dictionary (0.5); nil — all may.
 	AllowDict func(peer string, id []byte) bool
 
@@ -123,6 +132,7 @@ type Node struct {
 	dicts    *dictStore
 
 	stop chan struct{}
+	kick chan struct{} // something was queued: send now, not on the next tick
 	wg   sync.WaitGroup
 	// handshakes counts sessions set up (for tests: a network change needs no new one)
 	handshakes atomic.Int64
@@ -137,7 +147,8 @@ func NewNode(dir, name string) (*Node, error) {
 	n := &Node{ID: id, Trust: LoadTrust(dir), Name: name, boot: binary.BigEndian.Uint32(randBytes(4)),
 		rel: map[string]*RelayRoad{}, sessions: map[uint32]*session{}, current: map[string]*session{},
 		hs: map[uint32]*handshake{}, invites: map[string]*Invite{}, peers: map[string]*peerState{},
-		handlers: map[[2]int]Handler{}, resetAt: map[string]time.Time{}, dicts: loadDicts(dir), stop: make(chan struct{})}
+		handlers: map[[2]int]Handler{}, resetAt: map[string]time.Time{}, dicts: loadDicts(dir), stop: make(chan struct{}),
+		kick: make(chan struct{}, 1)}
 	n.Handle(0, 1, func(string, []cbor.RawMessage) ([]any, error) { return []any{}, nil }) // ping
 	n.Handle(0, 2, func(string, []cbor.RawMessage) ([]any, error) { return n.info(), nil })
 	n.Handle(0, 5, n.dictHandler)
@@ -214,6 +225,10 @@ func (n *Node) Start() {
 			select {
 			case <-n.stop:
 				return
+			case <-n.kick:
+				n.mu.Lock()
+				n.pumpLocked(time.Now())
+				n.mu.Unlock()
 			case now := <-t.C:
 				n.mu.Lock()
 				n.pumpLocked(now)
@@ -511,6 +526,12 @@ func (n *Node) onDataLocked(now time.Time, pkt []byte, from Endpoint) {
 	}
 	s := n.sessions[u32(pkt[1:5])]
 	if s == nil {
+		// our handshake is still waiting for its reply, and data from the new session
+		// overtook it: hold the data instead of resetting the session
+		if h := n.hs[u32(pkt[1:5])]; h != nil && !h.pair && len(h.early) < 16 {
+			h.early = append(h.early, earlyPacket{append([]byte(nil), pkt...), from})
+			return
+		}
 		k := from.key()
 		if now.Sub(n.resetAt[k]) >= 5*time.Second {
 			n.resetAt[k] = now
@@ -595,6 +616,9 @@ func (n *Node) onRespLocked(now time.Time, pkt []byte, from Endpoint) {
 	n.seenLocked(ps, from, now)
 	n.bootLocked(ps, binary.BigEndian.Uint32(payload[:4]))
 	n.sendInfoLocked(h.peer)
+	for _, e := range h.early {
+		n.onDataLocked(now, e.pkt, e.from)
+	}
 }
 
 // onPair1Locked: someone joins with our invite (Noise_XXpsk2, we respond).
@@ -970,7 +994,9 @@ func (n *Node) pumpLocked(now time.Time) {
 	for peer, ps := range n.peers {
 		s := n.current[peer]
 		if s == nil {
-			if !ps.st.idle() {
+			// take a part for the first packet only when a handshake really goes out:
+			// otherwise it would count as sent and wait for its retransmission timer
+			if !ps.st.idle() && now.Sub(ps.lastInit) >= initEvery && n.Trust.Get(peer) != nil {
 				first, _ := ps.st.nextPacket(now, false)
 				n.startInitLocked(now, peer, ps, first)
 			}
@@ -1058,13 +1084,26 @@ func (n *Node) newIndexLocked() uint32 {
 	}
 }
 
+// wakeLocked asks the service loop to send what was just queued.
+func (n *Node) wakeLocked() {
+	select {
+	case n.kick <- struct{}{}:
+	default:
+	}
+}
+
 // --- compression (spec §5) ---
 
 // pushLocked queues a message, compressed with the newest common dictionary when worth it.
 // The slot refers to our list at send time: the list changes only through event 0.5, which
 // travels in the same order as messages.
 func (n *Node) pushLocked(ps *peerState, msg []byte) {
+	defer n.wakeLocked()
 	d, slot := n.dicts.pick(ps.dicts, ps.lacks)
+	if n.NoCompression {
+		ps.st.push(msg, false)
+		return
+	}
 	if z := compress(msg, d, slot); z != nil {
 		ps.st.push(z, true)
 		return
@@ -1218,6 +1257,7 @@ func (n *Node) addDictLocked(d *Dict) error {
 			ps.st.push(msg, false)
 		}
 	}
+	n.wakeLocked()
 	return nil
 }
 

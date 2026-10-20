@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -41,6 +42,24 @@ type UDPRoad struct {
 	Drop func() bool
 	// Delay is for tests: one-way packet delay (a distant network).
 	Delay time.Duration
+	// Rate is for tests: link speed in bytes per second (0 — unlimited); packets queue
+	// behind each other like on a slow link.
+	Rate int
+
+	free                   time.Time // when the emulated link is free again
+	sentBytes, sentPackets atomic.Int64
+	recvBytes, recvPackets atomic.Int64
+}
+
+// RoadStats counts UDP payload bytes and datagrams (add 28 bytes of IP and UDP headers per
+// datagram for bytes on the wire).
+type RoadStats struct {
+	SentBytes, SentPackets, RecvBytes, RecvPackets int64
+}
+
+// Stats returns the counters since the road was opened.
+func (u *UDPRoad) Stats() RoadStats {
+	return RoadStats{u.sentBytes.Load(), u.sentPackets.Load(), u.recvBytes.Load(), u.recvPackets.Load()}
 }
 
 func listenUDP(addr string) (*UDPRoad, error) {
@@ -60,7 +79,12 @@ func listenUDP(addr string) (*UDPRoad, error) {
 
 func (u *UDPRoad) Name() string { return "udp" }
 
+// LocalAddr is the address the road listens on.
+func (u *UDPRoad) LocalAddr() string { return u.conn.LocalAddr().String() }
+
 func (u *UDPRoad) Send(addr string, pkt []byte) error {
+	u.sentBytes.Add(int64(len(pkt)))
+	u.sentPackets.Add(1)
 	if u.Drop != nil && u.Drop() {
 		return nil
 	}
@@ -76,9 +100,20 @@ func (u *UDPRoad) Send(addr string, pkt []byte) error {
 		u.addr[addr] = a
 		u.mu.Unlock()
 	}
-	if u.Delay > 0 {
+	if u.Delay > 0 || u.Rate > 0 {
+		wait := u.Delay
+		if u.Rate > 0 {
+			u.mu.Lock()
+			now := time.Now()
+			if u.free.Before(now) {
+				u.free = now
+			}
+			u.free = u.free.Add(time.Duration(len(pkt)+28) * time.Second / time.Duration(u.Rate))
+			wait += u.free.Sub(now)
+			u.mu.Unlock()
+		}
 		cp := append([]byte(nil), pkt...)
-		time.AfterFunc(u.Delay, func() { _, _ = u.conn.WriteToUDP(cp, a) })
+		time.AfterFunc(wait, func() { _, _ = u.conn.WriteToUDP(cp, a) })
 		return nil
 	}
 	_, err := u.conn.WriteToUDP(pkt, a)
@@ -95,6 +130,8 @@ func (u *UDPRoad) run(recv func([]byte, Endpoint)) {
 			}
 			continue
 		}
+		u.recvBytes.Add(int64(n))
+		u.recvPackets.Add(1)
 		if u.Drop != nil && u.Drop() {
 			continue
 		}
