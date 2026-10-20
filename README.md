@@ -34,10 +34,11 @@ P2PACT is what carries it between devices.
 | Language | Repository | Status |
 |---|---|---|
 | Go (reference) | [p2pact/p2pact-go](https://github.com/p2pact/p2pact-go) | pairing, sessions, UDP/TCP/relay, delivery, compression |
-| TypeScript | p2pact/p2pact-ts | in progress |
-| Python | p2pact/p2pact-py | planned |
+| TypeScript (Node.js) | [p2pact/p2pact-ts](https://github.com/p2pact/p2pact-ts) | pairing, sessions, UDP/TCP, delivery, compression; interoperates with Go |
+| Python | p2pact/p2pact-py | in progress |
 
-Write your own from the spec — and check it with the tests below.
+Write your own from the spec — and check it with the interop tests below: every pair of
+implementations pairs and exchanges messages both ways, over UDP and TCP.
 
 ## Tests and benchmarks
 
