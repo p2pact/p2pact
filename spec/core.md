@@ -148,8 +148,11 @@ stream. Numbers are varints (usually 1–2 bytes).
   anything out of order; a lone part waits up to 40 ms for a reply to ride on.
 - **Retransmission** — the timeout follows the measured round trip (RFC 6298: smoothed RTT
   plus four deviations, 50 ms – 4 s, 500 ms before the first sample) plus the time the link
-  needs for the parts queued ahead, doubling on every retry; resend on the next live road if
-  this one is silent. Three parts past a gap — resend the gap at once (fast retransmit).
+  needs for the parts queued ahead. It doubles on a retry only while a queue builds, or after
+  three tries in a row: a random loss is no reason to wait longer. A part is also taken as
+  lost when one sent a quarter of a round trip after it has arrived (RACK, RFC 8985), or when
+  three parts past it have arrived; it goes again at once, on the next live road if this one
+  is silent.
 - **Congestion control** — the window starts at 32 parts and keeps doubling every round trip
   while no queue builds (the round trip stays near its minimum); then it grows by one part
   per round trip. A loss halves it (never below 32) only while a queue builds: a loss
