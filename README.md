@@ -45,7 +45,10 @@ implementations pairs and exchanges messages both ways, over UDP and TCP.
 [p2pact/p2pact-tests](https://github.com/p2pact/p2pact-tests) compares P2PACT with WebSocket,
 HTTPS, HTTP/2, gRPC and HTTP/3 on bytes and time, for very short to huge chat messages, over
 emulated local network, Bluetooth, internet and mobile links, on open datasets of real
-conversations. Every number can be reproduced and every scenario changed.
+conversations, and over a real network (a laptop to a cloud server). Every message is checked
+for integrity; every number can be reproduced and every scenario changed. On the real network
+P2PACT opens a conversation 2–4× faster than the others, is the best or level with the best
+under load, and level or faster on huge messages.
 [Latest results](https://github.com/p2pact/p2pact-tests/blob/main/results/RESULTS.md).
 
 ## How it compares
