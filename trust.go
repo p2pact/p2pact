@@ -12,6 +12,7 @@ import (
 // Hints tell where to find a device (spec §7).
 type Hints struct {
 	UDP   []string   `json:"udp,omitempty"`   // ip:port addresses
+	TCP   []string   `json:"tcp,omitempty"`   // ip:port addresses (fallback road)
 	Relay *RelayHint `json:"relay,omitempty"` // its relay
 }
 
@@ -108,6 +109,9 @@ func (t *Trust) SetHints(addr, name, os string, h Hints) {
 	}
 	if len(h.UDP) > 0 {
 		p.Hints.UDP = h.UDP
+	}
+	if len(h.TCP) > 0 {
+		p.Hints.TCP = h.TCP
 	}
 	if h.Relay != nil {
 		p.Hints.Relay = h.Relay

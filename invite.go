@@ -34,15 +34,16 @@ type inviteWire struct {
 	Hints  hintsWire
 }
 
-// hintsWire is [UDP addresses, [relay address, fingerprint]].
+// hintsWire is [UDP addresses, [relay address, fingerprint], TCP addresses].
 type hintsWire struct {
 	_     struct{} `cbor:",toarray"`
 	UDP   []string
 	Relay []string
+	TCP   []string
 }
 
 func toWire(h Hints) hintsWire {
-	w := hintsWire{UDP: h.UDP}
+	w := hintsWire{UDP: h.UDP, TCP: h.TCP}
 	if h.Relay != nil {
 		w.Relay = []string{h.Relay.Addr, h.Relay.FP}
 	}
@@ -50,7 +51,7 @@ func toWire(h Hints) hintsWire {
 }
 
 func fromWire(w hintsWire) Hints {
-	h := Hints{UDP: w.UDP}
+	h := Hints{UDP: w.UDP, TCP: w.TCP}
 	if len(w.Relay) == 2 && w.Relay[0] != "" {
 		h.Relay = &RelayHint{Addr: w.Relay[0], FP: w.Relay[1]}
 	}

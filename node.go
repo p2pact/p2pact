@@ -119,6 +119,7 @@ type Node struct {
 	boot uint32
 	mu   sync.Mutex
 	udp  *UDPRoad
+	tcp  *TCPRoad
 	own  *RelayHint
 	rel  map[string]*RelayRoad // by server address
 
@@ -202,6 +203,22 @@ func (n *Node) RebindUDP(addr string) error {
 	return nil
 }
 
+// ListenTCP opens the fallback TCP road on an address; "" — dial only, no listener (a
+// phone behind a carrier NAT can still reach a computer).
+func (n *Node) ListenTCP(addr string) error {
+	t, err := listenTCP(addr, n.receive)
+	if err != nil {
+		return err
+	}
+	n.mu.Lock()
+	n.tcp = t
+	n.mu.Unlock()
+	return nil
+}
+
+// TCP returns the TCP road (nil if not opened).
+func (n *Node) TCP() *TCPRoad { return n.tcp }
+
 // UDP returns the UDP road (for tests: loss).
 func (n *Node) UDP() *UDPRoad { return n.udp }
 
@@ -248,6 +265,9 @@ func (n *Node) Close() {
 	if n.udp != nil {
 		n.udp.close()
 	}
+	if n.tcp != nil {
+		n.tcp.close()
+	}
 	for _, r := range n.rel {
 		r.close()
 	}
@@ -284,6 +304,11 @@ func (n *Node) Join(ctx context.Context, inv *Invite) (Peer, error) {
 	if n.udp != nil {
 		for _, a := range inv.Hints.UDP {
 			eps = append(eps, Endpoint{Road: n.udp, Addr: a})
+		}
+	}
+	if n.tcp != nil {
+		for _, a := range inv.Hints.TCP {
+			eps = append(eps, Endpoint{Road: n.tcp, Addr: a})
 		}
 	}
 	if inv.Hints.Relay != nil {
@@ -477,6 +502,9 @@ func (n *Node) hintsLocked() Hints {
 	var h Hints
 	if n.udp != nil {
 		h.UDP = n.udp.localAddrs()
+	}
+	if n.tcp != nil {
+		h.TCP = n.tcp.localAddrs()
 	}
 	if n.own != nil {
 		cp := *n.own
@@ -678,6 +706,9 @@ func (n *Node) onPair2Locked(now time.Time, pkt []byte, from Endpoint) {
 	hints := fromWire(pp.Hints)
 	if len(hints.UDP) == 0 {
 		hints.UDP = h.invite.Hints.UDP
+	}
+	if len(hints.TCP) == 0 {
+		hints.TCP = h.invite.Hints.TCP
 	}
 	if hints.Relay == nil {
 		hints.Relay = h.invite.Hints.Relay
@@ -881,9 +912,18 @@ func (n *Node) candidatesLocked(peer string, ps *peerState, now time.Time, all b
 		}
 	}
 	if len(alive) > 0 && !all {
+		rank := func(e *epState) int { // UDP, then TCP, then relay
+			switch e.ep.Road.Name() {
+			case "udp":
+				return 0
+			case "tcp":
+				return 1
+			}
+			return 2
+		}
 		best := alive[0]
-		for _, e := range alive[1:] { // direct (UDP) before relay
-			if e.ep.Road.Name() == "udp" && best.ep.Road.Name() != "udp" {
+		for _, e := range alive[1:] {
+			if rank(e) < rank(best) {
 				best = e
 			}
 		}
@@ -909,6 +949,11 @@ func (n *Node) candidatesLocked(peer string, ps *peerState, now time.Time, all b
 	if n.udp != nil {
 		for _, a := range p.Hints.UDP {
 			add(Endpoint{Road: n.udp, Addr: a})
+		}
+	}
+	if n.tcp != nil {
+		for _, a := range p.Hints.TCP {
+			add(Endpoint{Road: n.tcp, Addr: a})
 		}
 	}
 	if r := n.pairRelayLocked(p); r != nil {

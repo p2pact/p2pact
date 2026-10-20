@@ -69,7 +69,8 @@ once, and any packet may take any road.
 - **UDP — main.** One packet is one datagram of at most 1200 bytes (crosses any network
   without fragmentation). Default port 48730.
 - **TCP — fallback** where UDP is blocked (offices, hotels): a 2-byte length, then the packet.
-  *(planned)*
+  Connections are opened on demand and used both ways; a device behind a carrier NAT may only
+  dial out. Hints list TCP addresses separately.
 - **Relay** — a server that forwards packets inside a pair's channel and sees nothing else.
   The channel is the first 16 bytes of `HMAC-BLAKE2s(pair_secret, "relay")`: only those two
   know it. Today the relay speaks newline-terminated lines over TLS (a packet is a base64

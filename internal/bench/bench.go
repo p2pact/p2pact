@@ -29,18 +29,49 @@ var Profiles = []Profile{
 	{Name: "mobile", Delay: 100 * time.Millisecond, Rate: 500 << 10, Loss: 0.03},
 }
 
-// Size is a chat message size.
+// Size is a chat message size. Bytes is the generated size, or the median of the real
+// messages loaded into the bin [Min, Max).
 type Size struct {
-	Name  string
-	Bytes int
+	Name     string
+	Bytes    int
+	Min, Max int
+	real     []string
 }
 
 // Sizes are the default message sizes.
 var Sizes = []Size{
-	{"very short", 20},
-	{"medium", 150},
-	{"long", 2 << 10},
-	{"very long", 100 << 10},
+	{Name: "very short", Bytes: 20, Min: 1, Max: 40},
+	{Name: "medium", Bytes: 150, Min: 40, Max: 200},
+	{Name: "long", Bytes: 2 << 10, Min: 200, Max: 2 << 10},
+	{Name: "very long", Bytes: 100 << 10, Min: 2 << 10, Max: 1 << 30},
+}
+
+// Message is the i-th message of a size: a real one if a corpus is loaded, else generated.
+func Message(s Size, i int) string {
+	if len(s.real) > 0 {
+		return s.real[i%len(s.real)]
+	}
+	return Text(s.Bytes, int64(i))
+}
+
+// LoadCorpus puts real messages into the size bins; each bin's Bytes becomes its median.
+// Bins without messages keep generated text.
+func LoadCorpus(msgs []string) {
+	for i := range Sizes {
+		s := &Sizes[i]
+		s.real = nil
+		var lens []int
+		for _, m := range msgs {
+			if n := len(m); n >= s.Min && n < s.Max {
+				s.real = append(s.real, m)
+				lens = append(lens, n)
+			}
+		}
+		if len(lens) > 0 {
+			sort.Ints(lens)
+			s.Bytes = lens[len(lens)/2]
+		}
+	}
 }
 
 // Result is one protocol over one profile.
@@ -135,16 +166,20 @@ func Markdown(results []*Result) string {
 			}
 		}
 		fmt.Fprintf(&b, "### %s (%s)\n\n", p, describe(prof))
-		b.WriteString("| Message | " + join(rs, func(r *Result) string { return r.Protocol + " bytes" }) + " | " +
-			join(rs, func(r *Result) string { return r.Protocol + " time" }) + " |\n")
-		b.WriteString("|---" + strings.Repeat("|---:", 2*len(rs)) + "|\n")
+		header := "| Message | " + join(rs, func(r *Result) string { return r.Protocol }) + " |\n" +
+			"|---" + strings.Repeat("|---:", len(rs)) + "|\n"
+		b.WriteString("Bytes on the wire per message, both directions:\n\n" + header)
 		for _, s := range Sizes {
 			b.WriteString("| " + fmt.Sprintf("%s (%s)", s.Name, human(int64(s.Bytes))) + " | ")
-			b.WriteString(join(rs, func(r *Result) string { return wire(r, s.Name) }) + " | ")
+			b.WriteString(join(rs, func(r *Result) string { return wire(r, s.Name) }) + " |\n")
+		}
+		b.WriteString("| new connection + very short | " + join(rs, func(r *Result) string { return "≈" + human(r.ColdBytes) }) + " |\n\n")
+		b.WriteString("Time from sending to the ack (median):\n\n" + header)
+		for _, s := range Sizes {
+			b.WriteString("| " + fmt.Sprintf("%s (%s)", s.Name, human(int64(s.Bytes))) + " | ")
 			b.WriteString(join(rs, func(r *Result) string { return dur(r.RTT[s.Name]) }) + " |\n")
 		}
-		b.WriteString("| new connection + very short | " + join(rs, func(r *Result) string { return "≈" + human(r.ColdBytes) }) +
-			" | " + join(rs, func(r *Result) string { return dur(r.ColdTime) }) + " |\n\n")
+		b.WriteString("| new connection + very short | " + join(rs, func(r *Result) string { return dur(r.ColdTime) }) + " |\n\n")
 		for _, r := range rs {
 			if r.Note != "" {
 				fmt.Fprintf(&b, "- %s: %s\n", r.Protocol, r.Note)

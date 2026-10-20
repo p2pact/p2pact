@@ -43,7 +43,7 @@ Measured by `go test -v -run Compare` (packet sizes on the wire, without IP/UDP/
 
 ## Layers
 
-1. **Roads** — UDP, a relay; TCP, Bluetooth, via a third device *(planned)*.
+1. **Roads** — UDP, TCP, a relay; Bluetooth, via a third device *(planned)*.
 2. **Session** — Noise (`IK` for known devices, `XXpsk2` for pairing), X25519,
    ChaCha20-Poly1305, BLAKE2s. 25 bytes of overhead per packet.
 3. **Delivery** — piggybacked acks, retransmission over the next live road, long messages in
@@ -66,9 +66,9 @@ The full spec: [`spec/core.md`](spec/core.md) and [`spec/family.md`](spec/family
 
 ## Status
 
-Draft, v1. The reference implementation in Go covers pairing, sessions, UDP and relay roads,
+Draft, v1. The reference implementation in Go covers pairing, sessions, UDP, TCP and relay roads,
 delivery, messages and dictionary compression. Next: the chat tool spec, the family tool,
-TCP, Bluetooth and NAT hole punching.
+Bluetooth and NAT hole punching.
 
 ```go
 a, _ := p2pact.NewNode(dirA, "Laptop")

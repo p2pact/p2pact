@@ -189,7 +189,7 @@ func RunHTTPS(p Profile, n int) (*Result, error) {
 	// cold: a fresh connection with a full TLS handshake
 	cold := client()
 	start := time.Now()
-	if err := send(cold, Text(Sizes[0].Bytes, 1)); err != nil {
+	if err := send(cold, Message(Sizes[0], 1)); err != nil {
 		return nil, err
 	}
 	res.ColdTime = time.Since(start)
@@ -206,7 +206,7 @@ func RunHTTPS(p Profile, n int) (*Result, error) {
 		cnt := count(n, s)
 		for i := 0; i < cnt; i++ {
 			t := time.Now()
-			if err := send(warm, Text(s.Bytes, int64(i))); err != nil {
+			if err := send(warm, Message(s, i)); err != nil {
 				return nil, err
 			}
 			rtts = append(rtts, time.Since(t))
@@ -315,7 +315,7 @@ func RunWebSocket(p Profile, n int) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := send(c, r, Text(Sizes[0].Bytes, 1)); err != nil {
+	if err := send(c, r, Message(Sizes[0], 1)); err != nil {
 		return nil, err
 	}
 	res.ColdTime = time.Since(start)
@@ -327,7 +327,7 @@ func RunWebSocket(p Profile, n int) (*Result, error) {
 		cnt := count(n, s)
 		for i := 0; i < cnt; i++ {
 			t := time.Now()
-			if err := send(c, r, Text(s.Bytes, int64(i))); err != nil {
+			if err := send(c, r, Message(s, i)); err != nil {
 				return nil, err
 			}
 			rtts = append(rtts, time.Since(t))
