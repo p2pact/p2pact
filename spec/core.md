@@ -128,23 +128,34 @@ responder's key (they are paired).
 Inside the ciphertext — the delivery header and the message part:
 
 ```
-flags (1) | [ack] | [part number | part]
+flags (1) | [ack] | [part number | [stream | number in stream] | part]
+ack = up to N | count | count × (missing, received)
 ```
 
 Flags: `1` ack present, `2` message part present, `4` more parts follow, `8` compressed,
-`16` do not acknowledge. Numbers are varints (usually 1–2 bytes).
+`16` do not acknowledge, `32` the first part of a message on a stream (the stream and the
+message's number in it follow the part number), `64` a further part of a message on a
+stream. Numbers are varints (usually 1–2 bytes).
 
-- **Ack** — "got everything up to N" plus a bitmap of the 32 parts after it; it rides along
-  in any packet. As in TCP, a standalone ack goes at once for every second part and for
+- **Streams** — stream 0 (parts without `32`/`64`) is delivered strictly in the order sent.
+  A message on another stream is delivered as soon as all its parts are here and its
+  stream's earlier messages are delivered; streams do not wait for each other, so a loss on
+  one does not hold up the rest. One stream per chat is the natural use. Message numbers
+  start at 1 per stream; a result goes back on the stream of its call.
+- **Ack** — "got everything up to N", then the ranges received above the first gap as pairs
+  (parts missing, parts received), as many as fit in 60 bytes; it rides along in any
+  packet. As in TCP, a standalone ack goes at once for every second part and for
   anything out of order; a lone part waits up to 40 ms for a reply to ride on.
 - **Retransmission** — the timeout follows the measured round trip (RFC 6298: smoothed RTT
   plus four deviations, 50 ms – 4 s, 500 ms before the first sample) plus the time the link
   needs for the parts queued ahead, doubling on every retry; resend on the next live road if
   this one is silent. Three parts past a gap — resend the gap at once (fast retransmit).
-- **Congestion control** — the window starts at 32 parts and doubles every round trip (slow
-  start) until the round trip grows noticeably above its minimum (a queue is building) or a
-  loss halves it (never below 32). While a queue builds, at most twice the bandwidth-delay
-  product is in flight, the bandwidth being measured from acks (as in BBR).
+- **Congestion control** — the window starts at 32 parts and keeps doubling every round trip
+  while no queue builds (the round trip stays near its minimum); then it grows by one part
+  per round trip. A loss halves it (never below 32) only while a queue builds: a loss
+  without one is random and says nothing about congestion. While a queue builds, at most
+  twice the bandwidth-delay product (in bytes) is in flight, the bandwidth being measured
+  from acks (as in BBR). On a reliable road (TCP, a relay) there is no window of our own.
 - **Long messages** — in packet-sized parts, flag `4` on all but the last.
 - **Keepalive** — a flags-only packet (26 bytes), every 25 s on every quiet road (keeps NAT
   mappings open).
@@ -228,8 +239,10 @@ packets with names instead of numbers.
   hello (every device reports its new addresses over any working road), *(planned)* from
   local discovery (mDNS `_p2pact._udp`).
 - **Live road** — something arrived on it within 60 s.
-- **Choice** — every packet takes the best live road: direct before relay. Retransmissions
-  take the next one.
+- **Choice** — every packet takes the road the current session was heard on last; a better
+  kind (UDP before TCP before relay) wins only if heard within half a second of it, since a
+  device that reconnected leaves old endpoints "alive" for a while. Retransmissions go on
+  all roads.
 - **New road** — a keepalive on it; answered — it is live. Known devices are tried on all
   hints every 30 s while there is no live direct road.
 - *(planned)* **Direct across the internet** — both send UDP towards each other at the
