@@ -1,4 +1,4 @@
-# P2PACT — P2P Agent Chat Protocol
+# P2PACT — P2P Agent Chat Transport Protocol
 
 **Chat with your AI agents — and let them chat with each other — across your own devices.
 No servers, no accounts, over any connection.**

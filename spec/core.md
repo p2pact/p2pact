@@ -2,7 +2,7 @@
 
 Identifier: `p2pact/1`.
 
-**What it is.** P2PACT — the P2P Agent Chat Protocol — is how people and AI agents chat across
+**What it is.** P2PACT — the P2P Agent Chat Transport Protocol — is how people and AI agents chat across
 their own devices: how devices meet, find each other, trust each other, encrypt, and exchange
 chat messages directly, without servers. The core below carries any message; the chat itself
 is tool 1 (§8), and the family of devices (`family.md`, tool 3) decides who may chat with whom.
