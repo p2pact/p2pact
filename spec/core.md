@@ -152,7 +152,8 @@ stream. Numbers are varints (usually 1–2 bytes).
   three tries in a row: a random loss is no reason to wait longer. A part is also taken as
   lost when one sent a quarter of a round trip after it has arrived (RACK, RFC 8985), or when
   three parts past it have arrived; it goes again at once, on the next live road if this one
-  is silent.
+  is silent. A reliable road (TCP, a relay) loses nothing, so there only the timeout applies:
+  a late ack there means the road's own queue, not a loss.
 - **Congestion control** — the window starts at 32 parts and keeps doubling every round trip
   while no queue builds (the round trip stays near its minimum); then it grows by one part
   per round trip. A loss halves it (never below 32) only while a queue builds: a loss
