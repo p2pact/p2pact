@@ -17,7 +17,8 @@ internet. P2PACT connects your devices directly and keeps the chat going:
 - **The swarm survives.** A family of devices with a parent and deputies: if a computer goes
   away, another takes over its duties.
 - **Small and fast.** Binary CBOR messages with numbers instead of names, zstd with
-  dictionaries tuned for agent chats, data in the very first packet.
+  a dictionary each device trains on its own conversation with each other device (shown to
+  nobody else), data in the very first packet.
 
 The chat format follows ACP (Agent Client Protocol), so existing ACP clients and agents fit;
 P2PACT is what carries it between devices.
@@ -27,7 +28,9 @@ P2PACT is what carries it between devices.
 - [`spec/core.md`](spec/core.md) — devices, pairing, sessions, roads, delivery, messages,
   compression.
 - [`spec/family.md`](spec/family.md) — the family of devices: parent, deputies, the signed
-  book, the family dictionary.
+  book.
+- [`dict/common-1.zdict`](dict/common-1.zdict) — the common compression dictionary, trained on
+  OpenAssistant oasst2 (Apache-2.0); used until a device has trained its own.
 
 ## Implementations
 

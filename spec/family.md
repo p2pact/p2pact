@@ -10,8 +10,8 @@ of agents running across your devices.
 ## 1. Roles
 
 - **Parent** — exactly one, and **always a computer**, never a phone: a phone is often off,
-  offline or in a pocket, and training a dictionary is too heavy for it. The parent keeps the
-  family book (§2): admits, removes, appoints deputies; publishes the family dictionary (§6).
+  offline or in a pocket. The parent keeps the family book (§2): admits, removes, appoints
+  deputies.
 - **Deputies** — any number, **ordered** (first, second…). They can do what the parent does,
   except edit the parent or deputies above themselves. When the parent is unreachable, the
   first reachable computer deputy acts for it (§4). A phone may be a deputy (invite, edit the
@@ -28,9 +28,8 @@ two laptops still hand a chat to each other.
 A signed list; every device holds a copy:
 
 ```
-[generation, version, [member…], signer, signature, dictionary]
+[generation, version, [member…], signer, signature]
 member     = [address, key, signing_key, name, role, order, added, os]
-dictionary = [id, published]
 ```
 
 - `role`: `0` parent, `1` deputy, `2` child; `order` — the deputy's number (1, 2…), 0 for
@@ -39,7 +38,6 @@ dictionary = [id, published]
   together with it. It is part of the pairing payload (core §2).
 - `generation` grows when the parent changes, `version` with every edit within a generation.
   Newer means a larger `(generation, version)`.
-- `dictionary` — the current family dictionary (§6); omitted when there is none.
 - The signature is Ed25519 over the CBOR of everything except the signature itself.
 - The parent must be a computer: a book whose parent has a phone `os` is invalid.
 
@@ -90,20 +88,11 @@ hello); the receiver keeps whichever is newer. A new edit goes to everyone reach
 - event `3.1 book [book]` — a new version;
 - event `3.2 acting [address]` — who keeps the book now (the parent or the acting deputy).
 
-## 6. The family dictionary
+## 6. Dictionaries
 
-The compression dictionary (core §5) trained on the family's own conversations: it compresses
-better than the common one, but never leaves the family — phrases could be recovered from it.
-
-- **Only the parent publishes it** (or the acting deputy): it trains zstd on the
-  conversations it has (64 KB) and publishes a book with the new `dictionary` (`version` +1).
-  The id inside the signed book guarantees the dictionary is genuine; the bytes may come from
-  any family member and are checked against the id.
-- When: once a month, or when compression of recent conversations dropped 15 % compared to
-  the previous dictionary.
-- Devices that get the book fetch the bytes with `0.5 dict [id]` from the parent or from
-  anyone who has it, and announce it (`0.5 dicts`). Until then they use the common one.
-- Strangers (not in the family) never get the family dictionary: `0.5 dict` → error `4`.
+There is no family dictionary: every device trains its own for each device it talks to, on
+that conversation alone (core §5). A dictionary shared by the family would let one device
+recover phrases of conversations it never took part in.
 
 ## 7. Open questions
 

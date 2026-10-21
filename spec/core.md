@@ -163,22 +163,48 @@ stream. Numbers are varints (usually 1–2 bytes).
 - **Long messages** — in packet-sized parts, flag `4` on all but the last.
 - **Keepalive** — a flags-only packet (26 bytes), every 25 s on every quiet road (keeps NAT
   mappings open).
-- **Compression** — zstd **with a dictionary**. Plain compression gains nothing on short
-  texts; a dictionary of frequent words and fragments (natural language, code, agent replies)
-  compresses even short messages 2–4×. Messages under 64 bytes are not compressed; from
+- **Compression** — zstd **with a dictionary**. Plain compression gains little on short texts:
+  there is nothing to repeat inside one. A dictionary of what this conversation keeps repeating
+  (words, phrases, code, an agent's output format) does. Messages under 64 bytes are not
+  compressed; from
   32 KB on, a faster level is used (the best one costs more time than the bytes it saves).
-  - Two kinds of dictionaries: **common** — published with the spec, trained on open texts,
-    the same for everyone; **family** — one per family, published by the parent
-    (`family.md` §6). A device never trains its own — dictionaries would diverge.
+  - Two kinds of dictionaries:
+    - **common** — `dict/common-1.zdict` in this repository: 64 KB, trained on the training
+      half of OpenAssistant oasst2 (people and assistants in many languages, Apache-2.0) with
+      `zstd --train`; the same for everyone. It is what compresses until a device has its own.
+    - **own** — every device trains one **for each device it talks to**, on that conversation
+      only, so the dictionary shows the other side nothing it has not already seen. It is never
+      listed to, used with or given to any other device. *How* to train is up to the
+      implementation (any valid zstd dictionary works: only its owner compresses with it); the
+      reference one uses fastCover, the algorithm of `zstd --train`.
+  - **What an own dictionary learns:** the conversation messages the device sent to that device
+    (not tool 0), each cut to 4 KB — the start of a message gains most; up to the newest 1 MB.
+    While its own messages are fewer than 256 KB, the messages it received from that device
+    fill the history up to 256 KB: they help a device that writes little (a phone), and stop
+    helping once it has enough of its own. The history stays on the device, like its keys.
+  - **When:** the first at 32 KB of history; a new one each time the history has doubled (up to
+    1 MB); then monthly, or when compression of what it sends got 15 % worse than over the first
+    32 KB after training. Dictionary size: a quarter of the history, 4–64 KB.
   - **Dictionary id** — the first 16 bytes of BLAKE2s of its bytes: two different
     dictionaries never share an id, and a dictionary received from anyone is checked by it.
-  - In the hello (`0.2 info`) a device lists its dictionary ids, newest first; when the list
-    changes it sends event `0.5 dicts`.
+  - In the hello (`0.2 info`) a device lists the dictionaries **the receiving device may see**:
+    the common ones and the pair's (its own for that device and the one it got from it). When
+    that list changes it sends event `0.5 dicts` to that device.
+  - **A listed dictionary keeps its place.** A message compressed with it may still be on its
+    way on another stream, behind the new list (streams do not wait for each other), so places
+    never shift: a new dictionary goes to the end, a dropped one leaves an empty id (a
+    zero-length byte string) in its place. Only past 32 places does a new one take the oldest
+    empty place. A receiver ignores empty ids.
+  - A device that sees an id it lacks in the other's list asks for it (`0.5 dict [id]`),
+    checks the id and announces its list again; what it gets belongs to the pair (a device
+    that does not ask simply never gets that dictionary used for it). A device
+    answers `0.5 dict` only with a dictionary the asker may see; otherwise error `3`.
   - A compressed message (flag `8` on all its parts) is `slot (1) | zstd frame`. The slot is
-    the dictionary's position in the **sender's** list (1, 2…), `0` — no dictionary. The zstd
-    magic and the dictionary id inside the frame are stripped (8 bytes): the receiver
-    restores them. The sender uses the newest dictionary the receiver also has; if the result
-    is not shorter than the original, it sends the original.
+    the dictionary's position in the **sender's** list for this receiver (1, 2…), `0` — no
+    dictionary. The zstd magic and the dictionary id inside the frame are stripped (8 bytes):
+    the receiver restores them. The sender uses its own dictionary for the receiver if the
+    receiver has it, else the newest one both have; if the result is not shorter than the
+    original, it sends the original.
   - **Missing dictionary** (just published and not yet arrived, a stale list) is not an
     error: the receiver acknowledges delivery, holds the message, asks the sender
     `0.5 dict [id]` (the sender certainly has it), checks the id, decompresses and runs the
@@ -188,8 +214,8 @@ stream. Numbers are varints (usually 1–2 bytes).
   - A device that asked for `0.5 dict` lacks that dictionary: the sender does not compress
     anything for it with that dictionary (the reply included) until it announces its list
     again.
-  - The last 4 dictionaries are kept: a new one comes at most monthly, so an old one lives
-    for months and packets in flight still decompress.
+  - Up to 4 dictionaries of each kind are kept (common, own for a device, a device's own):
+    an old one lives long enough for packets in flight to decompress.
 
 ## 6. Messages
 
@@ -224,7 +250,7 @@ over HTTPS is about 400.
 
 - `0.1 ping` → `[]`;
 - `0.2 info` → hello: `[name, os, implementation, {tool: version}, [dictionaries], hints]`;
-  `dictionaries` — ids (§5), newest first; the hello is also sent as event `0.2` at the start
+  `dictionaries` — ids (§5), each in its place; the hello is also sent as event `0.2` at the start
   of every session;
 - `0.3 bye` — event: we were forgotten;
 - `0.4 forward [to, packet]` — forward *(planned)*;
