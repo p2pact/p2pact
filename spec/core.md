@@ -181,7 +181,9 @@ stream. Numbers are varints (usually 1–2 bytes).
     (not tool 0), each cut to 4 KB — the start of a message gains most; up to the newest 1 MB.
     While its own messages are fewer than 256 KB, the messages it received from that device
     fill the history up to 256 KB: they help a device that writes little (a phone), and stop
-    helping once it has enough of its own. The history stays on the device, like its keys.
+    helping once it has enough of its own. A device that has sent fewer than 8 messages worth
+    compressing trains none: what it receives alone does not make a dictionary for what it
+    sends. The history stays on the device, like its keys.
   - **When:** the first at 32 KB of history; a new one each time the history has doubled (up to
     1 MB); then monthly, or when compression of what it sends got 15 % worse than over the first
     32 KB after training (checked once a day). Dictionary size: a quarter of the history,
