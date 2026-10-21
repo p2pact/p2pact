@@ -184,7 +184,12 @@ stream. Numbers are varints (usually 1–2 bytes).
     helping once it has enough of its own. The history stays on the device, like its keys.
   - **When:** the first at 32 KB of history; a new one each time the history has doubled (up to
     1 MB); then monthly, or when compression of what it sends got 15 % worse than over the first
-    32 KB after training. Dictionary size: a quarter of the history, 4–64 KB.
+    32 KB after training (checked once a day). Dictionary size: a quarter of the history,
+    4–64 KB.
+  - **Not on the sending path:** sending and receiving only queue a message for the history; the
+    queue is taken in batches in the background, and a due dictionary is trained in a lull of
+    that conversation (the reference implementation: no message for 1 s, or after waiting 1 min).
+    A new dictionary costs the other side a download, so it comes rarely.
   - **Dictionary id** — the first 16 bytes of BLAKE2s of its bytes: two different
     dictionaries never share an id, and a dictionary received from anyone is checked by it.
   - In the hello (`0.2 info`) a device lists the dictionaries **the receiving device may see**:
