@@ -299,6 +299,12 @@ event   [3, tool, event, data…]
 - **Order.** A device runs the calls and events of one stream one at a time, in the order
   sent (a call's turn ends when its handler returns); streams do not wait for each other, so a
   slow handler holds up its own stream only. Service calls (tool 0) run at once.
+- **Answer later.** A call that waits long — a whole agent turn, a person's answer — must not
+  hold up its stream: a later message there may be the one that cancels it. Its handler starts
+  in turn but may take its reply out of the stream: the stream goes on as soon as the handler
+  returns, and the result or error goes when it is ready — once, on the call's stream, under
+  the same rules as any result (the caller's timeout; nothing for a call made before the
+  caller restarted, §4.2). Calls and events behind it start in order while it runs.
 - **Changes only.** State is not resent wholesale on a timer: subscribe → one snapshot →
   events about changes.
 - **Short names.** Long ids (chats, files) are replaced by small numbers within a session:

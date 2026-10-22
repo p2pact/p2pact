@@ -37,6 +37,12 @@ the first 8 bytes of BLAKE2s(sessionId) as an unsigned integer, 0 replaced by 1.
 one session stay in order; a loss on one chat holds up no other. Calls without a session
 (`initialize`, `session/new`, listing) go on stream 0.
 
+**Long calls answer later** (core §6). The agent device starts `session/prompt` in turn and
+answers it later, when the turn ends: `session/cancel` and the client's other messages on the
+same stream reach the agent while it works. The client answers `session/request_permission`
+later too, when the person decides: the agent device's `session/update` notifications on that
+stream keep coming meanwhile.
+
 ## 3. Connection
 
 ACP's `initialize` is per connection; here the "connection" is the pair of devices. The client
