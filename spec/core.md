@@ -276,6 +276,10 @@ stream. Numbers are varints (usually 1–2 bytes).
     dictionary among them), hellos and `0.5 dicts` may run out of order. A receiver that does
     not know the sender's list yet (it restarted, or the sender did) waits for its hello the
     same way and asks for it (`0.2 info`) rather than waiting for the event alone.
+  - **Held messages do not wait forever:** after 15 s the receiver asks again (`0.2 info`,
+    `0.5 dict`); after 2 minutes it drops what it holds, forgets the sender's list and sends its
+    own hello, so both sides learn the lists anew. The sender resends what matters (an
+    application-level acknowledgement), so a stuck dictionary costs a resend, not the link.
   - **The hello and the list are never compressed:** event `0.2`, the result of `0.2 info` and
     event `0.5 dicts` carry what the receiver needs to decompress, so a receiver without the
     sender's list can always read them. A receiver may still meet such a message compressed by
