@@ -355,6 +355,12 @@ packets with names instead of numbers.
   (Bluetooth) keeps two devices talking with no network; once UDP, TCP or a relay answers,
   the session moves there, and it comes back when they fall silent — a part resent on all
   roads arrives over the application road, and the answer comes back on it.
+- **Pause** (local, nothing on the wire) — a device going to sleep may pause: it sends
+  nothing at all (no keepalives, no probes, no answers), closes its relay and TCP connections
+  and keeps what is queued and its calls' timeouts. To the others it is just unreachable: their
+  parts wait for acks as for any silent device. On resume it speaks first — a keepalive on all
+  roads of each session it has, a handshake to the devices it has none with — and sends its
+  queue; a session the other side dropped meanwhile comes back through type `7` (§4.3).
 - *(planned)* **Direct across the internet** — both send UDP towards each other at the
   addresses the relay observed (NAT hole punching); once it works the relay is not needed.
 
