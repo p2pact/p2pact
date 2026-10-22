@@ -77,7 +77,32 @@ once, and any packet may take any road.
   line, sides `a`/`b`; see the `relay` package); *(planned)* binary and over UDP.
 - **Via a third device** — `0.4 forward [to, packet]` to a device that knows both; it forwards
   without understanding (end-to-end encryption). *(planned)*
-- **Bluetooth LE** — a packet per characteristic write. *(planned)*
+- **Application roads** — a link the application opens and the node cannot: Bluetooth LE,
+  a serial line, a pipe to another program. The application hands the node a way to send and
+  gives it what arrives; the node treats it like any other road. One is either
+  - a **datagram road** — one packet per datagram, which may be lost or reordered; it must
+    carry any packet whole, up to 1264 bytes (the most the TCP road's frame takes: a
+    handshake start with first data may pass 1200), or
+  - a **stream road** — a link that keeps order and loses nothing while it is up: packets are
+    framed as on TCP (a 2-byte length, then the packet), and the frames are cut into writes
+    of at most the link's own size (its MTU), however small. A broken link is attached again
+    as a new road, so framing starts afresh; a length over 1264 means the stream is damaged.
+
+  The application declares the road's MTU and, if it knows it, its rate (bytes a second); the
+  node plans with that rate until it has measured the link (§5).
+
+  **Bluetooth LE GATT** is a stream road: characteristic writes and notifications of 20–512
+  bytes (the negotiated ATT MTU minus 3), acknowledged by the link layer, in order; tens of
+  kilobytes a second. A packet of 1200 bytes is 3 to 60 writes; the layers above the road do
+  not change, and nothing new goes on the wire. A link with small datagrams that may be lost
+  or reordered cannot carry P2PACT in v1: that would need packets cut below the session.
+
+  **Which device is at the other end.** The application may tell the node that the road
+  reaches device X (it saw X's advertisement): the node then sends to X on it as on X's hints,
+  and starts a session over it at once if it has none. Otherwise the road is bound by what
+  comes on it, as any road is: a handshake names the device (§4.2), a data packet finds its
+  session; answers go back on the road they came on. An unbound road is also offered for
+  pairing (§2): an invite needs no hints when the devices share such a link.
 - **Local socket** — programs on the same computer (a UI, a CLI, an MCP server for agents)
   talk to the local node with the same packets. *(planned)*
 
@@ -174,6 +199,22 @@ stream. Numbers are varints (usually 1–2 bytes).
   without one is random and says nothing about congestion. While a queue builds, at most
   twice the bandwidth-delay product (in bytes) is in flight, the bandwidth being measured
   from acks (as in BBR). On a reliable road (TCP, a relay) there is no window of our own.
+- **Slow application roads** (§3: Bluetooth) — a window of 32 parts is 35 KB, a second or
+  more of such a link, and the round trip of a small packet says nothing about the queue a
+  burst builds in it (over a pipe with no latency, a rate measured from it is many times the
+  link's). So on an application road:
+  - at most one second of its rate is in flight, in bytes: the measured rate, or the declared
+    one before any measurement (16 KB/s when none is declared);
+  - the rate is measured only from parts sent while others were in flight ahead of them;
+  - the retransmission timeout adds twice the time the link needs for the part and those
+    queued ahead of it (with their packet and framing bytes), and the 40 ms an ack may wait:
+    a timer that fires on the link's queue sends the part again behind that queue, while a
+    late one costs little where nothing is lost;
+  - on a datagram road a part resent for a gap goes again only a round trip later: its copy
+    waits behind the link's queue, and the acks that show the gap meanwhile do not mean it was
+    lost again;
+  - a stream road loses nothing and keeps order, so an ack for a part sent twice is for its
+    first copy: a round-trip sample, and, as on TCP, only the timeout resends.
 - **Long messages** — in packet-sized parts, flag `4` on all but the last.
 - **Keepalive** — a flags-only packet (26 bytes), every 25 s on every quiet road (keeps NAT
   mappings open).
@@ -296,11 +337,18 @@ packets with names instead of numbers.
   local discovery (mDNS `_p2pact._udp`).
 - **Live road** — something arrived on it within 60 s.
 - **Choice** — every packet takes the road the current session was heard on last; a better
-  kind (UDP before TCP before relay) wins only if heard within half a second of it, since a
-  device that reconnected leaves old endpoints "alive" for a while. Retransmissions go on
-  all roads.
+  kind (UDP before TCP before relay before an application road) wins only if heard within
+  half a second of it, since a device that reconnected leaves old endpoints "alive" for a
+  while. Retransmissions go on all roads.
 - **New road** — a keepalive on it; answered — it is live. Known devices are tried on all
-  hints every 30 s while there is no live direct road.
+  hints every 30 s while there is no live direct road, and while the session runs over a relay
+  or an application road: a keepalive to every UDP and TCP address in their hints. A packet
+  that arrives on a better kind of road than the one in use is answered at once with a
+  keepalive on it, so both devices hear the better road and move to it together.
+- **Application roads** carry a session only while nothing better is up: a slow local link
+  (Bluetooth) keeps two devices talking with no network; once UDP, TCP or a relay answers,
+  the session moves there, and it comes back when they fall silent — a part resent on all
+  roads arrives over the application road, and the answer comes back on it.
 - *(planned)* **Direct across the internet** — both send UDP towards each other at the
   addresses the relay observed (NAT hole punching); once it works the relay is not needed.
 
@@ -327,7 +375,8 @@ Permissions in v1: a known device may use everything announced (your own devices
   mid-transfer, compression and a missing dictionary. An implementation in any language runs
   them against the reference one.
 - **On one computer** — two devices with different data directories and a relay: in one
-  process (automated tests) or in three (by hand), with artificial packet loss.
+  process (automated tests) or in three (by hand), with artificial packet loss; Bluetooth as an
+  application stream road over a local connection with 20-byte writes at 40 KB/s.
 
 ## 10. Versions
 

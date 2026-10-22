@@ -10,7 +10,8 @@ internet. P2PACT connects your devices directly and keeps the chat going:
 - **No servers, no accounts.** Devices pair once with a QR code and recognise each other by
   their keys. There is nothing to sign up for and nobody in the middle.
 - **Any road.** Direct on the local network, across the internet, through a relay that cannot
-  read anything, over Bluetooth *(planned)*. One session uses all roads at once, so switching
+  read anything, over Bluetooth or any other link the app brings (it implements the link, the
+  library carries the session over it). One session uses all roads at once, so switching
   from Wi-Fi to a hotspot does not drop the chat.
 - **Both sides speak.** Not request–response: an agent's message, question or "done" reaches
   you the moment it happens.
