@@ -274,7 +274,13 @@ stream. Numbers are varints (usually 1–2 bytes).
     `0.5 dict [id]` (the sender certainly has it), checks the id, decompresses and runs the
     message. Everything after it waits in order; only results of its own calls (the
     dictionary among them), hellos and `0.5 dicts` may run out of order. A receiver that does
-    not know the sender's list yet (the sender restarted) waits for its hello the same way.
+    not know the sender's list yet (it restarted, or the sender did) waits for its hello the
+    same way and asks for it (`0.2 info`) rather than waiting for the event alone.
+  - **The hello and the list are never compressed:** event `0.2`, the result of `0.2 info` and
+    event `0.5 dicts` carry what the receiver needs to decompress, so a receiver without the
+    sender's list can always read them. A receiver may still meet such a message compressed by
+    an older sender: it may try the dictionaries it has for that sender and take the result
+    only if it is a hello or a list.
   - A device that asked for `0.5 dict` lacks that dictionary: the sender does not compress
     anything for it with that dictionary (the reply included) until it announces its list
     again.
