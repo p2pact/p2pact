@@ -108,12 +108,22 @@ responder's key (they are paired).
 
 - First data does not wait for the reply: a call or event goes at once, and its answer comes
   in the second packet.
+- **First data after a restart.** Part numbers count from the receiver's boot (§5): a sender
+  that knew an earlier boot numbered the part in its first packet for that boot, and
+  renumbers everything once the reply shows the new boot id. So a device takes first data
+  only from a device that has heard its current boot id — that sent it data in a session, or
+  answered its handshake, since it started. Otherwise it drops the first data unacknowledged
+  (the handshake itself goes on), and the part comes again in the session, renumbered.
+  Accepting it would deliver that message twice and drop the part that later gets its number.
 - Replaying the first packet does not work: it carries a timestamp (8 bytes); the responder
   remembers the last one from that device and drops anything not newer.
 - The sender's key must be in the trusted list, otherwise silence: a device does not answer
   strangers at all (it is invisible to scanners).
 - The boot id tells the other side that this device restarted: unacknowledged messages are
-  renumbered and resent.
+  renumbered and resent — except results and errors: the calls they answer ended with the
+  restart, and its call ids start from 1 again, so a stale result would answer a new call.
+  A result whose call came before the restart is not sent at all. Round-trip and bandwidth
+  estimates start afresh (the device may be on another path now).
 
 ### 4.3 Session life
 
@@ -152,7 +162,11 @@ stream. Numbers are varints (usually 1–2 bytes).
   three tries in a row: a random loss is no reason to wait longer. A part is also taken as
   lost when one sent a quarter of a round trip after it has arrived (RACK, RFC 8985), or when
   three parts past it have arrived; it goes again at once, on the next live road if this one
-  is silent. A reliable road (TCP, a relay) loses nothing, so there only the timeout applies:
+  is silent. An ack sooner than the minimum round trip after a copy resent by the timeout is
+  for an earlier copy — the timeout fired on a queue, not a loss: for RACK the part counts
+  as sent at that earlier copy (else every part sent between the copies would be taken as
+  lost), and the ack is a round-trip sample, so the timeout catches up with the queue. A
+  reliable road (TCP, a relay) loses nothing, so there only the timeout applies:
   a late ack there means the road's own queue, not a loss.
 - **Congestion control** — the window starts at 32 parts and keeps doubling every round trip
   while no queue builds (the round trip stays near its minimum); then it grows by one part
@@ -241,6 +255,9 @@ event   [3, tool, event, data…]
   Unix seconds; keys — bytes.
 - A call `id` grows from 1 within a session; delivery has already removed duplicates, so a
   call runs exactly once.
+- **Order.** A device runs the calls and events of one stream one at a time, in the order
+  sent (a call's turn ends when its handler returns); streams do not wait for each other, so a
+  slow handler holds up its own stream only. Service calls (tool 0) run at once.
 - **Changes only.** State is not resent wholesale on a timer: subscribe → one snapshot →
   events about changes.
 - **Short names.** Long ids (chats, files) are replaced by small numbers within a session:
