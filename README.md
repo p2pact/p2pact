@@ -27,6 +27,7 @@ P2PACT is what carries it between devices.
 
 - [`spec/core.md`](spec/core.md) — devices, pairing, sessions, roads, delivery, messages,
   compression.
+- [`spec/chat.md`](spec/chat.md) — tool 1: ACP (Agent Client Protocol) carried between devices.
 - [`spec/family.md`](spec/family.md) — the family of devices: parent, deputies, the signed
   book.
 - [`dict/common-1.zdict`](dict/common-1.zdict) — the common compression dictionary, trained on

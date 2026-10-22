@@ -175,8 +175,10 @@ stream. Numbers are varints (usually 1–2 bytes).
     - **own** — every device trains one **for each device it talks to**, on that conversation
       only, so the dictionary shows the other side nothing it has not already seen. It is never
       listed to, used with or given to any other device. *How* to train is up to the
-      implementation (any valid zstd dictionary works: only its owner compresses with it); the
-      reference one uses fastCover, the algorithm of `zstd --train`.
+      implementation (any zstd dictionary in the standard format works: only its owner compresses
+      with it); the reference one uses fastCover, the algorithm of `zstd --train`. The standard
+      format — magic `0xEC30A437`, a non-zero id, entropy tables, then content — is required: a
+      raw-content dictionary has no id to restore in the frame (below) and is refused.
   - **What an own dictionary learns:** the conversation messages the device sent to that device
     (not tool 0), each cut to 4 KB — the start of a message gains most; up to the newest 1 MB.
     While its own messages are fewer than 256 KB, the messages it received from that device
@@ -297,7 +299,7 @@ Permissions in v1: a known device may use everything announced (your own devices
 - `0` — service (§6);
 - `1 chat` — chats with agents and between agents: list and read chats, send messages, answer
   an agent's question or permission request, subscribe to new messages. Its message format
-  follows ACP (Agent Client Protocol) so any ACP client can be a chat client *(spec next)*;
+  follows ACP (Agent Client Protocol) so any ACP client can be a chat client: `chat.md`;
 - `2` — reserved;
 - `3 family` — the family of devices: `family.md`.
 
