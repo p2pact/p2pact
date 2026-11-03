@@ -47,7 +47,9 @@ answer within 5 minutes is a refusal. Only kind `2` can join by such an invite.
 
 The Kotlin client SDK **p2pact-client** (JVM 17, Android API 26+) wraps the three public tools:
 [p2pact/p2pact-kotlin](https://github.com/p2pact/p2pact-kotlin), module `client/`, package
-`io.github.p2pact.client`. Clients for TypeScript and Python are in progress. For other
+`io.github.p2pact.client`. The Go client is the package `client` of
+[p2pact/p2pact-go](https://github.com/p2pact/p2pact-go) (see [Go](#go) below); clients for
+TypeScript and Python are in progress. For other
 languages see [the raw protocol](#raw-protocol) below. The module is built from the repository
 (`./gradlew :p2pact-client:build`); depend on it as a project or an included build.
 
@@ -151,6 +153,40 @@ client.toolEvents.subscribe { e -> println("${e.tool} event ${e.event} ${e.args}
 
 Method and event numbers belong to the plugin; its author documents them.
 
+### Go
+
+The same three tools in Go: `go get github.com/p2pact/p2pact-go`, package
+`github.com/p2pact/p2pact-go/client`. Calls take a `context.Context` and return typed structs
+that keep the JSON they were read from in `Raw`. Events are `Events[T]`: `Subscribe(func)` or
+`Chan()` (a channel; values queue, so a slow reader never holds up the stream). A runnable
+example is [`examples/client-cli`](https://github.com/p2pact/p2pact-go/tree/main/examples/client-cli).
+
+```go
+c, _ := client.New(dir, "My app", nil)                 // keys and paired computers live in dir
+defer c.Close()
+comp, _ := c.Pair(ctx, "p2pact1.…", nil)               // nil asks client.DefaultWants
+fmt.Println(comp.Name(), comp.State(), comp.Grants())  // Online / Offline; what the person allowed
+
+chat := comp.Chat()
+sessions, _ := chat.ListAllSessions(ctx, "")           // initialize goes first by itself
+updates, stop := chat.Updates.Chan()                   // live messages and history of loaded chats
+defer stop()
+chat.SetPermissionHandler(func(ctx context.Context, r *client.PermissionRequest) (client.PermissionOutcome, error) {
+	return r.Allow(), nil                              // ctx ends if another client answered first
+})
+res, _ := chat.Prompt(ctx, sessions[0].ID, "run the tests") // ends with the turn; ctx is the only timeout
+
+fleet := comp.Fleet()
+events, stopFleet := fleet.Events.Chan()
+defer stopFleet()
+w, _ := fleet.Watch(ctx, false)                        // snapshot in w.Sessions; w.Close(ctx) ends
+out, _ := comp.CallTool(ctx, "com.example.jira", 1, "PROJ-1") // a plugin's tool by name; CBOR results
+```
+
+A write on a read-only grant fails with `client.ErrForbidden` (`errors.Is`, or `errors.As` to
+a `*client.Error` and read `Code`); the tool's own JSON-RPC errors are `*client.RPCError`.
+Use `client.Wrap(node, nil)` over a node the application already runs.
+
 ## What read and write allow
 
 A tool's spec marks each method *read* or *write*; unmarked methods are write. A read-only
@@ -171,14 +207,15 @@ app can look but not touch, and the computer sends it nothing it cannot answer.
 
 ## Errors
 
-P2PACT errors mean the call did not reach the tool (Kotlin: `P2pactException` subclasses):
+P2PACT errors mean the call did not reach the tool (Kotlin: `P2pactException` subclasses; Go:
+`*client.Error` with the sentinels `client.ErrForbidden` and so on):
 
 - `1` no such tool or method (`NoMethodException`)
 - `2` bad arguments · `3` not found · `4` forbidden by grants (`ForbiddenException`)
 - `5` failed on the device · `6` not delivered, e.g. the plugin behind a tool is gone
 
 The chat, fleet and plugins tools carry JSON-RPC 2.0 inside; a JSON-RPC error comes back as a
-normal response with `error` (Kotlin: `RpcException`): `-32602` params, `-32601` no such method,
+normal response with `error` (Kotlin: `RpcException`, Go: `*client.RPCError`): `-32602` params, `-32601` no such method,
 `-32004` no such resource (session, plugin), `-32000` failed.
 
 An unreachable computer is not an error: calls wait for a road (a prompt waits in the queue and
