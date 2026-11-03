@@ -67,6 +67,11 @@ event `0.6 grants` once the session is up. No `wants` — the newcomer asks for 
 decides: until then the newcomer may use nothing (only tool `0`); a refusal forgets it (and
 says `0.3 bye`). A device that shows nothing to a person grants what was asked.
 
+A newcomer that joined with `wants` treats the inviting device's grants to it as `[]` until the
+first `0.6` (event or method result), and keeps that over a restart; the inviting device
+always sends `0.6` to it, even when the answer is `["*", 2]`. A newcomer that joined without
+`wants` assumes `["*", 2]` until told.
+
 **Local programs.** A device starts a program it trusts by installing it (a plugin, §8.2) with
 two environment variables: `P2PACT_SOCKET` — the path of its local socket (§3), and
 `P2PACT_INVITE` — a single-use invite (above) with no hints, valid while the program runs. The
@@ -365,7 +370,8 @@ over HTTPS is about 400.
 - event `0.4 alias [n, value]` — a short name (above);
 - `0.6 grants` → `[[[tool name, level]…]]` — what the caller may use on this device (§8.1), the
   list as one value; the same as event `0.6` whenever it changes. A device whose grants are
-  `["*", 2]` from pairing may never send it: no `0.6` means everything.
+  `["*", 2]` from a pairing without `wants` may never send it: no `0.6` means everything. After a
+  pairing with `wants`, no `0.6` yet means nothing (§2).
 
 Errors: `1` no such method, `2` bad arguments, `3` not found, `4` forbidden, `5` failed,
 `6` not delivered.
