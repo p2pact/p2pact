@@ -1,4 +1,4 @@
-# Tool 1 `chat` — ACP over P2PACT, v1 (draft)
+# Tool 1 `p2pact.chat` — ACP over P2PACT, v1 (draft)
 
 Runs on top of the core (`core.md`). A chat between a person and an agent, or between agents,
 on different devices of one owner.
@@ -88,6 +88,17 @@ one client may be connected: the agent device asks all of them, the first answer
 others get `{"method": "_p2pact/request_answered", "params": {"sessionId", "toolCallId"}}` so
 they stop showing it. With no client connected, the request waits (the agent waits) until one
 connects and calls `session/load` or `session/list`.
+
+**Read-only clients** (core §8.1, tool `p2pact.chat` at level 1). One P2PACT method carries all
+of ACP, so the level is checked on the JSON-RPC method inside:
+
+- *read* — `initialize`, `session/list`, `session/load`, and the events (`session/update`,
+  `_p2pact/session_changed`, `_p2pact/request_answered`);
+- *write* — everything else: `session/new`, `session/prompt`, `session/cancel`,
+  `session/set_mode`, `session/set_model`, and any method not listed here.
+
+A refused method is the P2PACT error `4`, not a JSON-RPC error. The agent device does not send
+`session/request_permission` to a read-only client: it cannot answer.
 
 ## 7. Files and terminals
 

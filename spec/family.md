@@ -1,4 +1,4 @@
-# Tool 3 `family` — the family of devices, v1 (draft)
+# Tool 3 `p2pact.family` — the family of devices, v1 (draft)
 
 Runs on top of the core (`core.md`). Devices pair once — with the family, not with every
 device. *(Not yet in the reference implementation.)*
@@ -97,4 +97,4 @@ recover phrases of conversations it never took part in.
 ## 7. Open questions
 
 - How long to wait before acting: 10 minutes is a guess.
-- Read-only rights for children — later, when needed (core §8, per-tool permissions).
+- Read-only rights for children — grants at level 1 (core §8.1); which tools, when needed.

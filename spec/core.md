@@ -35,6 +35,10 @@ Layers, bottom up:
 - **Address** — the first 16 bytes of BLAKE2s of the X25519 public key (as text: lowercase
   base32, 26 characters). It cannot be forged without stealing the key.
 - The name ("Work laptop") is a label for humans, never used for verification.
+- **Kind** — what the device is for, told in the pairing payload and the hello: `1` computer
+  (runs agents, serves tools), `2` client (an app a person holds: a phone, a desktop or web
+  app), `3` plugin (a program on the same computer that adds tools to it, §8.2). `0` or
+  missing — not said (an older device): the other side guesses as before, e.g. by `os`.
 - No accounts, no registration, no central server.
 
 ## 2. Pairing — once
@@ -52,7 +56,21 @@ The invite can travel **any way**: QR code, link, text, NFC. It is single-use.
 **Pairing handshake** — `Noise_XXpsk2_25519_ChaChaPoly_BLAKE2s`, pre-shared key `secret`.
 B checks that A's key matches the invite; A learns that B had the invite. Both save each other
 as trusted: `[address, key, name, pair_secret, hints, added]`, with `pair_secret = secret`.
-The handshake payload carries `[name, boot id, hints, signing key, os]`.
+The handshake payload carries `[name, boot id, hints, signing key, os, kind, wants]`;
+`kind` and `wants` are optional (§1, §8.1).
+
+**Permissions asked.** `wants` — what the newcomer asks to use on the inviting device:
+`[[tool name, level]…]` (§8.1). The inviting device shows it to its person next to the
+newcomer's name, the person may narrow it before saying yes, and the result is sent back as
+event `0.6 grants` once the session is up. No `wants` — the newcomer asks for everything
+(`["*", 2]`), as between a person's own devices.
+
+**Local programs.** A device starts a program it trusts by installing it (a plugin, §8.2) with
+two environment variables: `P2PACT_SOCKET` — the path of its local socket (§3), and
+`P2PACT_INVITE` — a single-use invite (above) with no hints, valid while the program runs. The
+program pairs over the socket with `kind` 3 and no `wants`; nobody is asked — the install was
+the consent, and the program's grants are those the install gave. A plugin is never added to
+the family, is reachable only over the local socket and is forgotten when uninstalled.
 
 **Family.** Devices pair once — with the family: the parent or a deputy invites, the newcomer
 receives the signed family book and meets everyone else from it, with no further QR codes
@@ -103,8 +121,11 @@ once, and any packet may take any road.
   comes on it, as any road is: a handshake names the device (§4.2), a data packet finds its
   session; answers go back on the road they came on. An unbound road is also offered for
   pairing (§2): an invite needs no hints when the devices share such a link.
-- **Local socket** — programs on the same computer (a UI, a CLI, an MCP server for agents)
-  talk to the local node with the same packets. *(planned)*
+- **Local socket** — programs on the same computer (a UI, a CLI, a plugin, an MCP server for
+  agents) talk to the local node with the same packets, over a stream road (above): a Unix
+  domain socket (`SOCK_STREAM`), on Windows a named pipe; framing as on TCP. Only the device's
+  own OS user may open it — the boundary of who may even try to pair; trust still comes from
+  pairing (§2).
 
 ## 4. Session
 
@@ -332,13 +353,16 @@ over HTTPS is about 400.
 **Tool 0 — service:**
 
 - `0.1 ping` → `[]`;
-- `0.2 info` → hello: `[name, os, implementation, {tool: version}, [dictionaries], hints]`;
-  `dictionaries` — ids (§5), each in its place; the hello is also sent as event `0.2` at the start
-  of every session;
+- `0.2 info` → hello: `[name, os, implementation, {tool: version}, [dictionaries], hints, kind,
+  {name: [tool, version]}]`; `dictionaries` — ids (§5), each in its place; `kind` — §1; the
+  last map — named tools (§8); the hello is also sent as event `0.2` at the start of every
+  session;
 - `0.3 bye` — event: we were forgotten;
 - `0.4 forward [to, packet]` — forward *(planned)*;
 - `0.5 dict [id]` → dictionary bytes; event `0.5 dicts [dictionaries]` — the list changed;
-- event `0.4 alias [n, value]` — a short name (above).
+- event `0.4 alias [n, value]` — a short name (above);
+- `0.6 grants` → `[[tool name, level]…]` — what the caller may use on this device (§8.1); the
+  same as event `0.6` whenever it changes.
 
 Errors: `1` no such method, `2` bad arguments, `3` not found, `4` forbidden, `5` failed,
 `6` not delivered.
@@ -376,25 +400,69 @@ packets with names instead of numbers.
 
 ## 8. Tools
 
-A tool is a number with numbered methods and events, its own spec and version. A device
-announces its tools in the hello; calling an unknown one is error `1`. Numbers 0–63 are
-assigned by the spec; 64 and up are free for implementations, no coordination needed.
+A tool is a set of numbered methods and events with its own spec and version. A device
+announces its tools in the hello; calling an unknown one is error `1`.
 
-Permissions in v1: a known device may use everything announced (your own devices).
-*(planned)* Per-tool permissions.
+**Numbers and names.** Every tool has a **name** — lowercase, dot-separated, the reverse of a
+domain its author holds (`com.example.jira`); names under `p2pact.` are given by this spec.
+On the wire a tool is a **number**:
 
-- `0` — service (§6);
-- `1 chat` — chats with agents and between agents: list and read chats, send messages, answer
-  an agent's question or permission request, subscribe to new messages. Its message format
-  follows ACP (Agent Client Protocol) so any ACP client can be a chat client: `chat.md`;
-- `2` — reserved;
-- `3 family` — the family of devices: `family.md`.
+- `0`–`63` — given by this spec, the same everywhere, announced in `{tool: version}`;
+- `64` and up — chosen by the device that serves the tool, for its sessions: it announces them
+  in the hello's named map `{name: [tool, version]}`, and callers use that number when calling
+  it. Another device may give the same name another number; numbers are never compared across
+  devices, names are.
+
+A number from 64 up that is not in the named map is the implementation's own, as before names;
+new tools should be named.
+
+Tools given by this spec:
+
+- `0 p2pact.service` — service (§6);
+- `1 p2pact.chat` — chats with agents and between agents: list and read chats, send messages,
+  answer an agent's question or permission request, subscribe to new messages. Its message
+  format follows ACP (Agent Client Protocol) so any ACP client can be a chat client: `chat.md`;
+- `2 p2pact.fleet` — computers and their agents' sessions, settings *(planned)*;
+- `3 p2pact.family` — the family of devices: `family.md`;
+- `4 p2pact.plugins` — a device's plugins: list, install, enable, disable, remove, their
+  grants and log *(planned)*.
+
+### 8.1 Permissions
+
+Each device keeps, for every device it trusts, **grants**: `[[tool name, level]…]`. Levels:
+`1` read — the methods a tool's spec marks *read*, and the tool's events; `2` write —
+everything. The name `*` stands for every tool, present and future. An unmarked method is
+write.
+
+- Grants are one-way: what A granted B governs B's calls to A, not the other way round.
+- A call outside the grants is error `4`; a tool's events go only to devices with at least
+  read on it. Tool `0` is always allowed.
+- Grants are set at pairing (§2, `wants`), may be narrowed, widened or revoked by the device's
+  person at any time, and are told to the other side by event `0.6`; a client hides what it
+  may not do.
+- A person's own devices pair with `["*", 2]` — v1's "a known device may use everything
+  announced". In a family the roles decide (`family.md`).
+
+### 8.2 Hosted tools
+
+A device may serve tools that a **plugin** implements — a program on the same computer, paired
+over the local socket (§2, §3). The device announces them in its own hello under its own
+numbers, as if they were its own; a caller cannot tell and does not need to.
+
+- A call to a hosted tool: the device checks the caller's grants (§8.1), forwards the call to
+  the plugin under its own call id and returns the plugin's result or error under the
+  caller's. The plugin sees the device as the caller.
+- Events the plugin sends on its tool go on to every device that has read on it.
+- The plugin may call the device's tools within the grants its install gave it.
+- A plugin that is gone (exited, not yet restarted): calls to its tools are error `6`; its
+  tools leave the hello when it is disabled or removed, and event `0.2` tells the others.
 
 ## 9. Verification
 
 - **Interop tests** — scenarios with reference packets: pairing, handshake, refusing a
   stranger, first-packet replay, loss and reordering, a long message, switching roads
-  mid-transfer, compression and a missing dictionary. An implementation in any language runs
+  mid-transfer, compression and a missing dictionary, named tools numbered differently on
+  each device, a call outside the grants, a hosted tool's call and events through its device. An implementation in any language runs
   them against the reference one.
 - **On one computer** — two devices with different data directories and a relay: in one
   process (automated tests) or in three (by hand), with artificial packet loss; Bluetooth as an
