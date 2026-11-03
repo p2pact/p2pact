@@ -63,7 +63,9 @@ The handshake payload carries `[name, boot id, hints, signing key, os, kind, wan
 `[[tool name, level]…]` (§8.1). The inviting device shows it to its person next to the
 newcomer's name, the person may narrow it before saying yes, and the result is sent back as
 event `0.6 grants` once the session is up. No `wants` — the newcomer asks for everything
-(`["*", 2]`), as between a person's own devices.
+(`["*", 2]`), as between a person's own devices. Pairing itself finishes before the person
+decides: until then the newcomer may use nothing (only tool `0`); a refusal forgets it (and
+says `0.3 bye`). A device that shows nothing to a person grants what was asked.
 
 **Local programs.** A device starts a program it trusts by installing it (a plugin, §8.2) with
 two environment variables: `P2PACT_SOCKET` — the path of its local socket (§3), and
@@ -361,8 +363,9 @@ over HTTPS is about 400.
 - `0.4 forward [to, packet]` — forward *(planned)*;
 - `0.5 dict [id]` → dictionary bytes; event `0.5 dicts [dictionaries]` — the list changed;
 - event `0.4 alias [n, value]` — a short name (above);
-- `0.6 grants` → `[[tool name, level]…]` — what the caller may use on this device (§8.1); the
-  same as event `0.6` whenever it changes.
+- `0.6 grants` → `[[[tool name, level]…]]` — what the caller may use on this device (§8.1), the
+  list as one value; the same as event `0.6` whenever it changes. A device whose grants are
+  `["*", 2]` from pairing may never send it: no `0.6` means everything.
 
 Errors: `1` no such method, `2` bad arguments, `3` not found, `4` forbidden, `5` failed,
 `6` not delivered.
