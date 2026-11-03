@@ -45,6 +45,33 @@ P2PACT is what carries it between devices.
 Write your own from the spec — and check it with the interop tests below: every pair of
 implementations pairs and exchanges messages both ways, over UDP and TCP.
 
+## Build on P2PACT
+
+The computer side is the P2PACT engine (today shipped inside Nomad Code: `nomad` on the command
+line). Two ways to build on it:
+
+- [**Build your own app**](docs/apps.md) — a phone, desktop, web or bot client for your agents:
+  pair with `nomad invite`, ask for grants, use chat, fleet and plugin tools.
+- [**Write a plugin**](docs/plugins.md) — a program the engine runs that adds named tools
+  other devices can call.
+
+Libraries (protocol, plugins):
+[Go](https://github.com/p2pact/p2pact-go) ·
+[Kotlin/JVM and Android](https://github.com/p2pact/p2pact-kotlin) ·
+[TypeScript](https://github.com/p2pact/p2pact-ts) ·
+[Python](https://github.com/p2pact/p2pact-py).
+
+Client SDK (typed chat, fleet and plugins tools): Kotlin today
+([`p2pact-client`](https://github.com/p2pact/p2pact-kotlin/tree/main/client)); TypeScript and
+Python in progress.
+
+Examples:
+[`p2pact-cli`](https://github.com/p2pact/p2pact-kotlin/tree/main/examples/cli) (Kotlin client: pair,
+list chats, send, watch);
+plugin hello in [Python](https://github.com/p2pact/p2pact-py/tree/main/examples/plugin_hello) and
+[TypeScript](https://github.com/p2pact/p2pact-ts/tree/main/examples/plugin-hello), and in Go in
+Nomad Code (`agent/examples/plugin-hello`).
+
 ## Tests and benchmarks
 
 [p2pact/p2pact-tests](https://github.com/p2pact/p2pact-tests) compares P2PACT with WebSocket,
