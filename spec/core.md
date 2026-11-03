@@ -428,8 +428,8 @@ Tools given by this spec:
 - `2 p2pact.fleet` — computers and their agents' sessions, settings: list, watch, start, stop,
   change: `fleet.md`;
 - `3 p2pact.family` — the family of devices: `family.md`;
-- `4 p2pact.plugins` — a device's plugins: list, install, enable, disable, remove, their
-  grants and log *(planned)*.
+- `4 p2pact.plugins` — a device's plugins: list, enable, disable, their grants and log;
+  install and remove stay on the device: `plugins.md`.
 
 ### 8.1 Permissions
 
