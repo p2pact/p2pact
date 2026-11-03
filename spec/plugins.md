@@ -45,7 +45,20 @@ count over.
 
 Carried as in fleet (`fleet.md` §1): `4.1 rpc [request]` → `[response]`, JSON-RPC 2.0 with the
 object turned into CBOR one to one; errors `-32602` params, `-32601` no such method, `-32004`
-no such plugin, `-32000` failed. There are no events yet.
+no such plugin, `-32000` failed. A call refused for lack of a grant (a write to a reader) is
+P2PACT error 4, not a JSON-RPC error.
+
+Event `4.1 notify [notification, n]` — a JSON-RPC notification from the device to a client
+that subscribed with `plugins/watch` (§3); `n` counts per device, as in fleet. Sent only while
+the client holds read on `p2pact.plugins`; the subscription ends when read is taken away, the
+road to the client is gone (it subscribes again after its next hello) or it unwatches. Events
+of different plugins and kinds are independent: no order between them is promised.
+
+- `plugins/changed` — params: the plugin's `Plugin` entry as in `plugins/list`, now. Sent when
+  a plugin is installed, removed, switched on or off, starts, stops, announces or drops a tool,
+  exits (`restarting`), or is disabled after repeated exits (`failed`, `enabled: false`). Removed:
+  the last entry plus `removed: true`. The same state is never sent twice in a row. A slow client
+  may lose events: `plugins/list` is the truth.
 
 ## 3. Methods
 
@@ -58,7 +71,10 @@ no such plugin, `-32000` failed. There are no events yet.
   the plugin has announced now, a subset of `tools`.
 - `plugins/log` `{name, lines?}` — `{name, log}`: the last `lines` (100) lines of `plugin.log`.
 - `plugins/grants` `{name}` — `{name, grants: [{tool, level}], read}`: what the plugin may use
-  of the device (`read`, `write`) and which of its methods are read.
+  of the device (`level` is the string `read` or `write`) and which of its methods are read.
+- `plugins/watch` — subscribe to `plugins/changed` (§2); the answer is the same as
+  `plugins/list`, taken after the subscription starts, so no change falls between the two.
+  `plugins/unwatch` — `{ok: true}`. A device without the event source answers `-32601`.
 
 *Write* (level 2):
 
