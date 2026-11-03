@@ -48,7 +48,8 @@ answer within 5 minutes is a refusal. Only kind `2` can join by such an invite.
 The Kotlin client SDK **p2pact-client** (JVM 17, Android API 26+) wraps the three public tools:
 [p2pact/p2pact-kotlin](https://github.com/p2pact/p2pact-kotlin), module `client/`, package
 `io.github.p2pact.client`. The Go client is the package `client` of
-[p2pact/p2pact-go](https://github.com/p2pact/p2pact-go) (see [Go](#go) below); clients for
+[p2pact/p2pact-go](https://github.com/p2pact/p2pact-go) (see [Go](#go) below); the Swift client is the library product `P2PACTClient` of
+[p2pact/p2pact-swift](https://github.com/p2pact/p2pact-swift) (see [Swift](#swift) below); clients for
 TypeScript and Python are in progress. For other
 languages see [the raw protocol](#raw-protocol) below. The module is built from the repository
 (`./gradlew :p2pact-client:build`); depend on it as a project or an included build.
@@ -205,6 +206,30 @@ app can look but not touch, and the computer sends it nothing it cannot answer.
   person at the computer.
 - **Events** go only to devices with at least read on the tool.
 
+### Swift
+
+The same three tools in Swift (macOS 13+, iOS 16+): add `https://github.com/p2pact/p2pact-swift`
+and use the product `P2PACTClient`. Calls are `async` and throw `P2pactCallError` / `RpcError`;
+events are `Events<T>`: `subscribe { … }` or `stream()` (an `AsyncStream`; values queue). Models keep
+the JSON they were read from in `raw`. A runnable example is
+[`Examples/ClientCLI`](https://github.com/p2pact/p2pact-swift/tree/main/Examples/ClientCLI).
+
+```swift
+let client = try P2pactClient(dir: dataDir, name: "My app")   // keys and paired computers live in dir
+let computer = try await client.pair("p2pact1.…")             // asks for defaultWants
+try await computer.whenOnline()
+print(computer.name, computer.state, computer.grants)         // .online / .offline; what the person allowed
+
+let chat = computer.chat
+chat.permissionHandler = { request in request.allow() }
+let loaded = try await chat.loadSession("s1")                 // the whole history, in order
+let result = try await chat.prompt("s1", text: "run the tests")
+
+let fleet = computer.fleet
+_ = try await fleet.watch()
+for await event in fleet.events.stream() { /* … */ }
+```
+
 ## Errors
 
 P2PACT errors mean the call did not reach the tool (Kotlin: `P2pactException` subclasses; Go:
@@ -215,7 +240,7 @@ P2PACT errors mean the call did not reach the tool (Kotlin: `P2pactException` su
 - `5` failed on the device · `6` not delivered, e.g. the plugin behind a tool is gone
 
 The chat, fleet and plugins tools carry JSON-RPC 2.0 inside; a JSON-RPC error comes back as a
-normal response with `error` (Kotlin: `RpcException`, Go: `*client.RPCError`): `-32602` params, `-32601` no such method,
+normal response with `error` (Kotlin: `RpcException`, Go: `*client.RPCError`, Swift: `RpcError`): `-32602` params, `-32601` no such method,
 `-32004` no such resource (session, plugin), `-32000` failed.
 
 An unreachable computer is not an error: calls wait for a road (a prompt waits in the queue and
@@ -230,7 +255,7 @@ The Nomad Code `contract/` folder holds an example JSON file for every message.
 
 ## Raw protocol
 
-With no client SDK, use a P2PACT library of your language (Go, TypeScript, Python, Kotlin — they
+With no client SDK, use a P2PACT library of your language (Go, TypeScript, Python, Kotlin, Swift — they
 implement pairing, sessions, roads, delivery, compression) or the spec. At the level of
 calls the chat, fleet and plugins tools are the same:
 
