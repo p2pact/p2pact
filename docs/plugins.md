@@ -186,7 +186,7 @@ Node.js 22.15+. Kotlin has the same shape: `newPlugin(File(dir), name)` returns 
 Each is a complete plugin with a `plugin.json`, one read method `greet`, one write method
 `bump` and a periodic `tick` event:
 
-- Go — `agent/examples/plugin-hello` in the Nomad Code repository (`dev.p2pact.example.hello`)
+- Go — [`p2pact-go/examples/plugin-hello`](https://github.com/p2pact/p2pact-go/tree/main/examples/plugin-hello) (`dev.p2pact.example.hello`)
 - Python — [`p2pact-py/examples/plugin_hello`](https://github.com/p2pact/p2pact-py/tree/main/examples/plugin_hello)
 - TypeScript — [`p2pact-ts/examples/plugin-hello`](https://github.com/p2pact/p2pact-ts/tree/main/examples/plugin-hello)
 

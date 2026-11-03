@@ -69,8 +69,8 @@ Examples:
 [`p2pact-cli`](https://github.com/p2pact/p2pact-kotlin/tree/main/examples/cli) (Kotlin client: pair,
 list chats, send, watch);
 plugin hello in [Python](https://github.com/p2pact/p2pact-py/tree/main/examples/plugin_hello) and
-[TypeScript](https://github.com/p2pact/p2pact-ts/tree/main/examples/plugin-hello), and in Go in
-Nomad Code (`agent/examples/plugin-hello`).
+[TypeScript](https://github.com/p2pact/p2pact-ts/tree/main/examples/plugin-hello) and
+[Go](https://github.com/p2pact/p2pact-go/tree/main/examples/plugin-hello).
 
 ## Tests and benchmarks
 
