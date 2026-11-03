@@ -49,7 +49,10 @@ Layers, bottom up:
 [1, key_A, "Work laptop", secret, exp, hints]
 ```
 
-`secret` — 32 random bytes; `exp` — expiry (10 minutes); `hints` — where to find A now (§7).
+`secret` — 32 random bytes; `exp` — expiry (10 minutes); `hints` — where to find A now (§7):
+`[udp, relay, tcp, ws]` — UDP addresses; `[relay address, certificate fingerprint]`; TCP
+addresses; WebSocket URLs of a relay (`wss://…`, for browsers). Absent elements are `null`; the
+fourth is left out when empty, and a reader takes as many elements as it knows.
 The invite can travel **any way**: QR code, link, text, NFC. It is single-use.
 *(planned)* A short 6-digit code to type by hand, with lookup on the local network.
 
@@ -100,6 +103,13 @@ once, and any packet may take any road.
   The channel is the first 16 bytes of `HMAC-BLAKE2s(pair_secret, "relay")`: only those two
   know it. Today the relay speaks newline-terminated lines over TLS (a packet is a base64
   line, sides `a`/`b`; see the `relay` package); *(planned)* binary and over UDP.
+  - **Relay over WebSocket** — for a browser, which has no sockets and cannot pin a certificate.
+    The same line protocol, one WebSocket message (text) per line, the trailing newline
+    optional; the relay shares its channels with the TLS listener, so a browser on `wss://` and a
+    device on TLS reach each other. It needs a certificate from a certificate authority; plain
+    `ws://` is for tests on loopback only. A device lists the URLs in its hints (the `ws`
+    element, §2); the relay of a pair is chosen as for TLS (§7), from `relay` or `ws`
+    depending on what the device can dial.
 - **Via a third device** — `0.4 forward [to, packet]` to a device that knows both; it forwards
   without understanding (end-to-end encryption). *(planned)*
 - **Application roads** — a link the application opens and the node cannot: Bluetooth LE,
@@ -114,7 +124,9 @@ once, and any packet may take any road.
     as a new road, so framing starts afresh; a length over 1264 means the stream is damaged.
 
   The application declares the road's MTU and, if it knows it, its rate (bytes a second); the
-  node plans with that rate until it has measured the link (§5).
+  node plans with that rate until it has measured the link (§5). It may also declare the road
+  **direct**: a link straight between the two devices (a WebRTC data channel, a LAN link),
+  which §7 ranks with TCP, above a relay.
 
   **Bluetooth LE GATT** is a stream road: characteristic writes and notifications of 20–512
   bytes (the negotiated ATT MTU minus 3), acknowledged by the link layer, in order; tens of
@@ -297,6 +309,10 @@ stream. Numbers are varints (usually 1–2 bytes).
     the receiver restores them. The sender uses its own dictionary for the receiver if the
     receiver has it, else the newest one both have; if the result is not shorter than the
     original, it sends the original.
+  - **A device may never compress** (a browser: a decoder is small, a compressor is not): it
+    sends every message as it is, and still lists the dictionaries it can decode with, so others
+    compress for it. Receiving needs a zstd decoder with dictionary support and nothing else; no
+    flag in the hello is needed.
   - **Missing dictionary** (just published and not yet arrived, a stale list) is not an
     error: the receiver acknowledges delivery, holds the message, asks the sender
     `0.5 dict [id]` (the sender certainly has it), checks the id, decompresses and runs the
@@ -386,7 +402,8 @@ packets with names instead of numbers.
   local discovery (mDNS `_p2pact._udp`).
 - **Live road** — something arrived on it within 60 s.
 - **Choice** — every packet takes the road the current session was heard on last; a better
-  kind (UDP before TCP before relay before an application road) wins only if heard within
+  kind (UDP before TCP before relay before an application road; an application road declared
+  direct, §3, ranks with TCP) wins only if heard within
   half a second of it, since a device that reconnected leaves old endpoints "alive" for a
   while. Retransmissions go on all roads.
 - **New road** — a keepalive on it; answered — it is live. Known devices are tried on all
@@ -394,7 +411,7 @@ packets with names instead of numbers.
   or an application road: a keepalive to every UDP and TCP address in their hints. A packet
   that arrives on a better kind of road than the one in use is answered at once with a
   keepalive on it, so both devices hear the better road and move to it together.
-- **Application roads** carry a session only while nothing better is up: a slow local link
+- **Application roads** (not direct) carry a session only while nothing better is up: a slow local link
   (Bluetooth) keeps two devices talking with no network; once UDP, TCP or a relay answers,
   the session moves there, and it comes back when they fall silent — a part resent on all
   roads arrives over the application road, and the answer comes back on it.
