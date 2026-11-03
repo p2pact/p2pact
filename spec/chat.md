@@ -54,7 +54,9 @@ device restarts (its boot id changed). Capabilities are those of ACP; P2PACT add
 "_meta": {"p2pact": {"agents": [{"id": "claude", "name": "Claude Code", "version": "…"}, …]}}
 ```
 
-— the agents the device can start (in the `initialize` response).
+— the agents the device can start (in the `initialize` response). The same object carries
+`"ext": 1` when the device speaks the extensions of §9. A client that wants the device's
+extension notifications (§9.2) sends `"_meta": {"p2pact": {"ext": 1}}` in `initialize`.
 
 ## 4. Many agents, many sessions
 
@@ -92,10 +94,12 @@ connects and calls `session/load` or `session/list`.
 **Read-only clients** (core §8.1, tool `p2pact.chat` at level 1). One P2PACT method carries all
 of ACP, so the level is checked on the JSON-RPC method inside:
 
-- *read* — `initialize`, `session/list`, `session/load`, and the events (`session/update`,
-  `_p2pact/session_changed`, `_p2pact/request_answered`);
+- *read* — `initialize`, `session/list`, `session/load`, the extensions marked *read* in §10,
+  and the events (`session/update`, `_p2pact/session_changed`, `_p2pact/request_answered`,
+  `_p2pact/report`);
 - *write* — everything else: `session/new`, `session/prompt`, `session/cancel`,
-  `session/set_mode`, `session/set_model`, and any method not listed here.
+  `session/set_mode`, `session/set_model`, the extensions marked *write* in §10, and any method
+  not listed here.
 
 A refused method is the P2PACT error `4`, not a JSON-RPC error. The agent device does not send
 `session/request_permission` to a read-only client: it cannot answer.
@@ -108,7 +112,127 @@ files: clients answer these with JSON-RPC error `-32601` unless they deliberatel
 folder. Large attachments a person sends with a prompt go inside the prompt (ACP content
 blocks), split into parts by the core.
 
-## 8. Versions
+## 8. Metadata under `_meta.p2pact`
+
+ACP leaves `_meta` free for extensions; this tool uses the `p2pact` key. All fields are
+optional for a reader; unknown ones are ignored.
+
+- `initialize` request: `ext` (number) — the client wants §9.2 notifications. Response:
+  `agents`, `ext` (§3).
+- `session/new` request: `agent` (§4), `mid` (§5), and the first-chat fields `model` (string,
+  one of the agent's models; empty — the agent's default), `text` (string — the first task,
+  sent at once; the client need not send a separate prompt), `perms` (`"skip"` — the agent
+  asks nothing | `"ask"` — safe mode; empty — the device's setting).
+- `session/prompt` request: `mid` (§5). Response: `duplicate: true` — the `mid` was already
+  executed, nothing was sent again.
+- `session/load` response: `older: true` — only the tail of the conversation was replayed;
+  `_p2pact/older` (§10) fetches earlier messages.
+- `session/update` `update`: `seq` (number, increasing within the session) and `time` (RFC 3339)
+  on every replayed or live message. A client that loads a session again skips the `seq` it has
+  already shown. Streamed text of an unfinished agent message comes as `agent_message_chunk`
+  pieces: the first one carries `seq` and the whole text so far, the following ones carry no
+  `seq` and extend that message.
+- `session/request_permission` `options[]`: `description` (string) — explanation of an answer
+  option of an agent's question (§9.1).
+- `session/list` entry and `_p2pact/session_changed`: `agent`, `title`, `state`, `updatedAt` (§4).
+
+## 9. Extensions
+
+ACP has no way to close a chat, page the history, or ask several questions with options at
+once. The agent device adds methods named `_p2pact/<name>`, written like ACP methods (JSON-RPC,
+`sessionId` in params, so they ride the session's stream). A device may implement any subset;
+a method it does not know answers JSON-RPC `-32601`. A client must work without them (plain
+ACP). Methods with another prefix (the reference implementation has `_nomad/*` for its own
+apps) are not part of this tool; a client ignores them.
+
+**9.1 Questions.** An agent may ask the person for a choice. One question with one answer goes
+as ACP `session/request_permission`: `toolCall.title` is the question, `options[]` are the
+answers (`optionId` `o0`, `o1`…, `name` = label, `kind` `allow_once`, `_meta.p2pact.description`).
+The client answers `{"outcome": {"outcome": "selected", "optionId": "o1"}}`.
+
+Several questions, or an answer that may take several options, go as a request from the agent
+device `_p2pact/question`:
+
+```
+params: {"sessionId", "toolCallId",
+         "questions": [{"question": "…", "header": "…"?, "multi": false?,
+                        "options": [{"label": "…", "description": "…"?}, …]}, …]}
+result: {"answers": {"<question text>": "<label>"}}
+```
+
+For a `multi` question the answer is the chosen labels joined by `", "`. Like
+`session/request_permission`, it goes to every connected client with write access, the first
+answer wins, the others get `_p2pact/request_answered` (§6). A client that cancels or never
+answers leaves the question waiting.
+
+**9.2 Notification names.** The device sends its extension notifications and requests
+(`_p2pact/question`, `_p2pact/report`) to a client that announced `ext: 1` in `initialize` or
+has called any `_p2pact/<name>`; the announcement is per connection and is read again at every
+`initialize`. `_p2pact/session_changed` and `_p2pact/request_answered` go to every client as in
+§4 and §6.
+
+**9.3 Commands.** Every command method of §10 takes params as listed and answers
+`{"lines": [<line>, …]}`: JSON objects, each with a `cmd` field naming what it is, produced
+while the command ran. A line produced later (a long command) arrives as the notification
+`_p2pact/report` with `{"line": <line>}` on stream 0. Lines with an unknown `cmd` are skipped.
+A failure the person should see arrives as the line `{"cmd": "alert", "id": "<sessionId>",
+"text": "…"}`. The result is `{"lines": []}` when there is nothing to report.
+
+## 10. Extension methods
+
+Level in brackets: *read* works for a read-only client (§6), *write* needs write access. Params
+are those of the method; `sessionId` is a session of `session/list`.
+
+- `_p2pact/older` *(read)* — earlier messages of a long conversation. Params `sessionId`,
+  `before` (the `seq` of the oldest message the client has). Line `{"cmd": "older", "id",
+  "messages": [{"seq", "role": "user" | "assistant" | "tool", "text", "time", "images"?}],
+  "more": bool}` — the page just before `before`, oldest first; `more` — there are still
+  earlier ones.
+- `_p2pact/commands` *(read)* — the agent's slash commands of this chat, for completion in the
+  input field. Params `sessionId`. Late line `{"cmd": "commands", "id", "list": [{"name",
+  "desc"?, "hint"?, "args"?: [{"value", "desc"?}]}]}` (the device asks the agent, it takes seconds).
+- `_p2pact/files` *(read)* — files of the chat's folder matching a query (for `@file`
+  completion). Params `sessionId`, `query`. Line `{"cmd": "files", "id", "query", "list":
+  ["<relative path>", …]}` (up to 50).
+- `_p2pact/history` *(read)* — closed conversations of the agents on the device, newest first,
+  for a "History" screen. Params `query` (text search; empty — all), `offset` (number, default
+  0 = start; a page is up to 60 items). Line `{"cmd": "history", "query", "from", "total", "list":
+  [{"id", "agent", "dir", "project"?, "title", "updated" (ms), "count"?, "open"?}], "partial"?}`;
+  `count` may arrive in a second line with the same `from` that replaces the first. `open`: the
+  conversation is in `session/list` now.
+- `_p2pact/history_open` *(write)* — bring a closed conversation back into `session/list` as
+  `closed` so it can be loaded and continued. Params `sessionId` (the `id` of a history item).
+  No lines; an error comes as the alert line.
+- `_p2pact/projects` *(read)* — folders to start a chat in: recent ones and folders grouped by
+  project. Params `cwd` (an extra folder to describe, optional). Line `{"cmd": "projects",
+  "dirs": ["<folder>", …], "project_dirs": {"<project>": ["<folder>", …]}, "dir_repos":
+  {"<folder>": "<git remote>"}}`.
+- `_p2pact/agents` *(read)* — agents with the models they offer for `session/new` (`model`
+  of §8). No params. Lines `{"cmd": "presets", "list": [{"id", "name", …}]}` — ready-made
+  choices (agent + model), the first is the main one — and `{"cmd": "agents", "list": [{"id",
+  "name", "type", "enabled", "models": ["…"], "default"?}]}` (finding models can take seconds).
+- `_p2pact/image` *(read)* — bytes of an image that a message points to with a `file://`
+  `resource_link` (the file is on the agent device). Params `sessionId`, `path` (the path from
+  the link; only images of that chat are served). Line `{"cmd": "image", "id", "path",
+  "data": "<base64>"}` — big images come downscaled — or the same with `"error"`:
+  `not_found` | `no_file` | `too_big` | `bad_image`.
+- `_p2pact/diff` *(read)* — changes in the chat's folder (git). Params `sessionId`. Line
+  `{"cmd": "diff", "id", "files": [{"path", "added", "removed", "status"}], "patch": "<unified
+  diff>", "truncated": bool}`, or with `"error"`: `not_found` | `not_git` | text.
+- `_p2pact/close` *(write)* — close the chat: it leaves `session/list` (state `closed` in
+  `_p2pact/session_changed`), and the agent process of the chat is stopped when the device
+  runs it. Params `sessionId`.
+- `_p2pact/restart` *(write)* — start the agent of a chat again, same session (a hung or
+  updated agent). Params `sessionId`. Only for chats the device runs itself; others get the
+  alert line.
+- `_p2pact/hide` *(write)* — hide a chat from the list by the person's choice, or show it again;
+  the chat itself goes on. Params `sessionId`, `on` (bool).
+
+Examples of every message: `contract/tools/p2pact.chat/` in the reference implementation
+(github.com/aidarbn/nomad-code), one JSON file per message.
+
+## 11. Versions
 
 This is tool 1 version 1 (hello `{1: 1}`). ACP's own version is negotiated in `initialize` as
-ACP says.
+ACP says. Extensions only grow: a method, a line or a field is never removed or changed in type;
+a new incompatible shape gets a new name.

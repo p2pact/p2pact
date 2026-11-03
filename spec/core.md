@@ -425,7 +425,8 @@ Tools given by this spec:
 - `1 p2pact.chat` — chats with agents and between agents: list and read chats, send messages,
   answer an agent's question or permission request, subscribe to new messages. Its message
   format follows ACP (Agent Client Protocol) so any ACP client can be a chat client: `chat.md`;
-- `2 p2pact.fleet` — computers and their agents' sessions, settings *(planned)*;
+- `2 p2pact.fleet` — computers and their agents' sessions, settings: list, watch, start, stop,
+  change: `fleet.md`;
 - `3 p2pact.family` — the family of devices: `family.md`;
 - `4 p2pact.plugins` — a device's plugins: list, install, enable, disable, remove, their
   grants and log *(planned)*.
