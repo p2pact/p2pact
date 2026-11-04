@@ -526,6 +526,15 @@ packets with names instead of numbers.
   alive). The observed (reflexive) address joins the UDP addresses of its hints, next to the
   local ones; when it changes, it replaces the old reflexive one. The hello carries the
   change to the devices in session.
+  **Prime** — before a datagram to a public IPv4 address (not private, `100.64.0.0/10`,
+  loopback or link-local), when none went to one from that socket for 20 s, the device sends
+  one byte to port 3478 (STUN) of the same host, and datagrams to public addresses wait 50 ms
+  behind it. Carrier NATs often map a socket endpoint-independently only once it has talked
+  to the STUN port (operators keep WebRTC working that way); before that each destination
+  gets a port of its own, and the address the relay observes is not the one devices see. A
+  flow opened before the prime keeps its own port — hence first, and the wait: the NAT takes
+  a moment to apply it. Nothing answers the byte; a receiver drops a packet shorter than 5
+  bytes.
   **Punch** — a keepalive every 200 ms for 3 s to every UDP address in the other device's
   hints (over UDP only — never on a relay, an application road or a road via a third device),
   sent when
