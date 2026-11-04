@@ -136,8 +136,37 @@ once, and any packet may take any road.
     `ws://` is for tests on loopback only. A device lists the URLs in its hints (the `ws`
     element, §2); the relay of a pair is chosen as for TLS (§7), from `relay` or `ws`
     depending on what the device can dial.
-- **Via a third device** — `0.4 forward [to, packet]` to a device that knows both; it forwards
-  without understanding (end-to-end encryption). *(planned)*
+- **Via a third device** — a device X that two devices A and B both trust carries their
+  packets inside its own sessions with each of them, without understanding them: the packets
+  are end-to-end encrypted between A and B (§4), so X sees what a relay sees.
+  - **Who forwards.** X forwards between A and B only if it trusts both and its person has
+    opted it in **for that pair** (one consent for both directions, kept with the trusted list;
+    it may be withdrawn at any time, and forgetting either device withdraws it). A and B are
+    not asked: they already trust each other, and X can neither read nor forge their packets.
+  - **Telling.** X lists, in its hello to A (the ninth element, §6), the addresses of the
+    devices it forwards to for A, and sends its hello again (event `0.2`) when that list
+    changes. A hello without the element lists none.
+  - **Sending.** A sends X the event `0.7 forward [to, packet]`; X sends B the event
+    `0.8 forwarded [from, packet]`. `to` and `from` are addresses (16 bytes), `packet` a whole
+    P2PACT packet of at most 1264 bytes (as an application road carries). Both events go on
+    the stream numbered by the other device's address — its first 8 bytes, big-endian, `0`
+    replaced by `1` — so a loss towards one device holds up nothing else; they are never
+    compressed or learnt from (§5, tool 0), and they run at once, even while other messages
+    wait for a dictionary.
+  - **X forwards** a `0.7` only when its sender (`from`), `to` and X are three different
+    devices it trusts, the pair has its consent, it has a live road to both that is not itself
+    a road via a third device (one hop: no chains, no loops), its queue to `to` holds fewer
+    than 64 parts (its own traffic goes first), and the direction `from` → `to` is within the
+    rate limit — 256 KB/s with bursts of 64 KB unless its application sets another. Anything
+    else it drops silently: the packet's own session resends it, or another road carries it.
+  - **Receiving.** B takes a `0.8` only from a device whose hello listed `from` for B, over a
+    road that is not via a third device. The packet is then handled as one that arrived on the
+    road "via X" from `from`, like on any road: a handshake names the device (silence if B
+    does not trust it), a data packet finds its session, and answers go back on the road they
+    came on — as a `0.7` to X. A device sends on the road via X to every device X lists for
+    it, as on that device's hints, and starts a session over it when it has none.
+  - The road via X loses nothing that X did not drop (X's sessions deliver the events), so
+    delivery treats it as a reliable road (§5). §7 ranks it with an application road.
 - **Application roads** — a link the application opens and the node cannot: Bluetooth LE,
   a serial line, a pipe to another program. The application hands the node a way to send and
   gives it what arrives; the node treats it like any other road. One is either
@@ -410,11 +439,16 @@ over HTTPS is about 400.
 
 - `0.1 ping` → `[]`;
 - `0.2 info` → hello: `[name, os, implementation, {tool: version}, [dictionaries], hints, kind,
-  {name: [tool, version]}]`; `dictionaries` — ids (§5), each in its place; `kind` — §1; the
+  {name: [tool, version]}, [forwards]]`; `forwards` — the addresses this device forwards to
+  for the receiving device (§3, via a third device), left out when there are none; `dictionaries` — ids (§5), each in its place; `kind` — §1; the
   last map — named tools (§8); the hello is also sent as event `0.2` at the start of every
   session;
 - `0.3 bye` — event: we were forgotten;
-- `0.4 forward [to, packet]` — forward *(planned)*;
+- `0.4` — not used (once planned as the call `forward`: a result for every forwarded packet
+  would double the traffic, so forwarding is the events `0.7` and `0.8`);
+- event `0.7 forward [to, packet]` — carry this packet to device `to`; event
+  `0.8 forwarded [from, packet]` — a packet device `from` sent through us (§3, via a third
+  device);
 - `0.5 dict [id]` → dictionary bytes; event `0.5 dicts [dictionaries]` — the list changed;
 - event `0.4 alias [n, value]` — a short name (above);
 - `0.6 grants` → `[[[tool name, level]…]]` — what the caller may use on this device (§8.1), the
@@ -442,18 +476,22 @@ packets with names instead of numbers.
 - **Live road** — something arrived on it within 60 s.
 - **Choice** — every packet takes the road the current session was heard on last; a better
   kind (UDP before TCP before relay before an application road; an application road declared
-  direct, §3, ranks with TCP) wins only if heard within
-  half a second of it, since a device that reconnected leaves old endpoints "alive" for a
-  while. Retransmissions go on all roads.
+  direct, §3, ranks with TCP; a road via a third device ranks with an application road) wins
+  only if heard within half a second of it, since a device that reconnected leaves old
+  endpoints "alive" for a while. Retransmissions go on all roads — a road via a third device
+  only while no other road is live: every packet on it costs the forwarder.
 - **New road** — a keepalive on it; answered — it is live. Known devices are tried on all
-  hints every 30 s while there is no live direct road, and while the session runs over a relay
-  or an application road: a keepalive to every UDP and TCP address in their hints. A packet
+  hints every 30 s while there is no live direct road, and while the session runs over a
+  relay, an application road or a road via a third device: a keepalive to every UDP and TCP
+  address in their hints. A packet
   that arrives on a better kind of road than the one in use is answered at once with a
   keepalive on it, so both devices hear the better road and move to it together.
 - **Application roads** (not direct) carry a session only while nothing better is up: a slow local link
   (Bluetooth) keeps two devices talking with no network; once UDP, TCP or a relay answers,
   the session moves there, and it comes back when they fall silent — a part resent on all
-  roads arrives over the application road, and the answer comes back on it.
+  roads arrives over the application road, and the answer comes back on it. A road via a
+  third device (§3) is the same: it keeps two devices talking when neither reaches the other
+  but both reach the forwarder, and gives way to anything better.
 - **Pause** (local, nothing on the wire) — a device going to sleep may pause: it sends
   nothing at all (no keepalives, no probes, no answers), closes its relay and TCP connections
   and keeps what is queued and its calls' timeouts. To the others it is just unreachable: their
@@ -528,7 +566,8 @@ numbers, as if they were its own; a caller cannot tell and does not need to.
 - **Interop tests** — scenarios with reference packets: pairing, handshake, refusing a
   stranger, first-packet replay, loss and reordering, a long message, switching roads
   mid-transfer, compression and a missing dictionary, named tools numbered differently on
-  each device, a call outside the grants, a hosted tool's call and events through its device. An implementation in any language runs
+  each device, a call outside the grants, a hosted tool's call and events through its device, two devices
+  that reach each other only through a third. An implementation in any language runs
   them against the reference one.
 - **On one computer** — two devices with different data directories and a relay: in one
   process (automated tests) or in three (by hand), with artificial packet loss; Bluetooth as an
