@@ -567,7 +567,9 @@ Tools given by this spec:
   change: `fleet.md`;
 - `3 p2pact.family` — the family of devices: `family.md`;
 - `4 p2pact.plugins` — a device's plugins: list, enable, disable, their grants and log;
-  install and remove stay on the device: `plugins.md`.
+  install and remove stay on the device: `plugins.md`;
+- `5 p2pact.term` — terminals: shells on the device, opened, watched and typed into from other
+  devices, their output as bytes: `term.md`.
 
 ### 8.1 Permissions
 
@@ -584,6 +586,20 @@ write.
   may not do.
 - A person's own devices pair with `["*", 2]` — v1's "a known device may use everything
   announced". In a family the roles decide (`family.md`).
+
+**Former names.** A tool this spec numbers may have been served before under a name of its
+device's own (a named tool from 64 up, §8). Such a device may announce the tool under both: its
+number here in `{tool: version}` and the former name in the named map, so that devices that
+know only the former name keep working.
+
+- Grants on either name count for both: a call or an event of the tool, under either name,
+  gets the highest level any entry of the caller's grants gives on any of its names (or `*`).
+- Under each name the tool is the same: same methods, same events. A device answers under the
+  number it was called by and sends a device events under the name that device used: the number
+  it called or watched by, or, if it never did, this spec's number when the device announces
+  it in its hello, else the former name.
+- A caller that knows both names calls this spec's number when the device announces it in its
+  hello, else the former name.
 
 ### 8.2 Hosted tools
 

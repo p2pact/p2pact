@@ -25,6 +25,8 @@ in [`spec/`](../spec); this page is the short path.
   - `p2pact.chat` — chats with agents, ACP carried between devices ([chat.md](../spec/chat.md)).
   - `p2pact.fleet` — the computer, its sessions, settings, watching ([fleet.md](../spec/fleet.md)).
   - `p2pact.plugins` — installed plugins: list, log, enable, disable ([plugins.md](../spec/plugins.md)).
+  - `p2pact.term` — terminals on the computer: open, watch, type, close ([term.md](../spec/term.md)).
+    Write on it is a shell on the computer: ask for it only if you need it.
   - tools added by plugins, under their own names.
 
 ## Pair
@@ -201,6 +203,8 @@ app can look but not touch, and the computer sends it nothing it cannot answer.
   `fleet/unwatch`. **Write:** everything else, including `engine/status` and `settings/get`
   (they name the data directory and the other devices).
 - **plugins, read:** `plugins/list|log|grants`. **Write:** `plugins/enable|disable`.
+- **term, read:** `term/list`, `term/attach`, `term/detach`, and the output. **Write:**
+  `term/open`, `term/input`, `term/resize`, `term/close` — a shell on the computer.
 - **Never offered over P2PACT** (error `-32601`, or `4` to a read-only app): granting and
   revoking devices, pairing, forgetting devices, and `plugins/install|remove`. They are a
   person at the computer.

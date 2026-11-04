@@ -31,6 +31,8 @@ P2PACT is what carries it between devices.
 - [`spec/chat.md`](spec/chat.md) — tool 1: ACP (Agent Client Protocol) carried between devices.
 - [`spec/family.md`](spec/family.md) — the family of devices: parent, deputies, the signed
   book.
+- [`spec/term.md`](spec/term.md) — tool 5: terminals on a computer, opened and typed into from
+  other devices.
 - [`dict/common-1.zdict`](dict/common-1.zdict) — the common compression dictionary, trained on
   OpenAssistant oasst2 (Apache-2.0); used until a device has trained its own.
 
