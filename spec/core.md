@@ -121,7 +121,9 @@ once, and any packet may take any road.
 - **Relay** — a server that forwards packets inside a pair's channel and sees nothing else.
   The channel is the first 16 bytes of `HMAC-BLAKE2s(pair_secret, "relay")`: only those two
   know it. Today the relay speaks newline-terminated lines over TLS (a packet is a base64
-  line, sides `a`/`b`; see the `relay` package); *(planned)* binary and over UDP.
+  line, sides `a`/`b`; see the `relay` package); *(planned)* binary and over UDP. On UDP, on
+  the same port number as its TLS listener, the relay answers observe (type `8`, §4.1): the
+  address a device's datagrams come from, for the direct road across NAT (§7).
   - **Code slots** (§2 short code) — a first line with `op` instead of `channel`; one answer, then
     the relay closes: `{"relay":1,"op":"put","slot":…,"box":…,"ttl":s,"tok":<32 hex>}` → `{"ok":true}`
     (a slot held under another `tok` → `{"error":"taken"}`, A picks another code);
@@ -221,7 +223,23 @@ keeps a window of the last 2048 numbers and drops replays and too-old packets. T
 number is also the cipher nonce. The tag covers the cleartext header too.
 
 Types: `1` handshake start, `2` handshake reply, `3`–`5` pairing (§2), `6` data,
-`7` "unknown session".
+`7` "unknown session", `8` observe.
+
+**Observe** (`8`) — UDP only, between a device and a relay, never between devices; nothing in
+it is encrypted.
+
+```
+request  device → relay: 8 | nonce (16) | zeros (19)                    36 bytes
+reply    relay → device: 8 | nonce (16) | IP (16) | port (2, big-endian) 35 bytes
+```
+
+The device sends the request from the UDP socket its UDP road uses, to the relay's hint
+address over UDP (the port number of its TLS listener). The relay answers with the source
+address it saw, IPv4 as IPv4-mapped IPv6 (`::ffff:a.b.c.d`). The reply is never larger than
+the request (no amplification). The relay ignores datagrams that are not type `8` or shorter
+than 36 bytes, and drops requests over a light per-source-IP limit (≈ 10 a second). The device
+takes a reply only if its nonce matches a request it sent to that relay address and it came
+from that address. A relay that does not answer is harmless.
 
 ### 4.2 Known-device handshake — data in the first packet
 
@@ -503,8 +521,23 @@ packets with names instead of numbers.
   parts wait for acks as for any silent device. On resume it speaks first — a keepalive on all
   roads of each session it has, a handshake to the devices it has none with — and sends its
   queue; a session the other side dropped meanwhile comes back through type `7` (§4.3).
-- *(planned)* **Direct across the internet** — both send UDP towards each other at the
-  addresses the relay observed (NAT hole punching); once it works the relay is not needed.
+- **Direct across the internet** (NAT hole punching). A device with a relay sends observe
+  (§4.1) when its relay road comes up, then every 25 s (it also keeps the NAT mapping
+  alive). The observed (reflexive) address joins the UDP addresses of its hints, next to the
+  local ones; when it changes, it replaces the old reflexive one. The hello carries the
+  change to the devices in session.
+  **Punch** — a keepalive every 200 ms for 3 s to every UDP address in the other device's
+  hints (over UDP only — never on a relay, an application road or a road via a third device),
+  sent when
+  - our reflexive address is learnt or changes: to every device whose session is not on a
+    live direct (UDP or TCP) road;
+  - a hello brings changed UDP addresses while that session is not on a live direct road;
+  - a session comes up over a relay, an application road or a road via a third device.
+
+  Both sides punch, each opening its own NAT towards the other. A keepalive that gets through
+  is answered on UDP (New road, above) and the session moves there; the relay stays as a
+  fallback. The probes every 30 s go on as before. A symmetric or carrier NAT does not punch:
+  the session stays on the relay.
 
 ## 8. Tools
 
