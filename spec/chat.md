@@ -118,7 +118,8 @@ ACP leaves `_meta` free for extensions; this tool uses the `p2pact` key. All fie
 optional for a reader; unknown ones are ignored.
 
 - `initialize` request: `ext` (number) — the client wants §9.2 notifications. Response:
-  `agents`, `ext` (§3).
+  `agents`, `ext` (§3). `v` (number) — the client wants complete extension results (§9.3);
+  the response carries `v` too, the highest level the device speaks.
 - `session/new` request: `agent` (§4), `mid` (§5), and the first-chat fields `model` (string,
   one of the agent's models; empty — the agent's default), `text` (string — the first task,
   sent at once; the client need not send a separate prompt), `perms` (`"skip"` — the agent
@@ -171,62 +172,83 @@ has called any `_p2pact/<name>`; the announcement is per connection and is read 
 `initialize`. `_p2pact/session_changed` and `_p2pact/request_answered` go to every client as in
 §4 and §6.
 
-**9.3 Commands.** Every command method of §10 takes params as listed and answers
-`{"lines": [<line>, …]}`: JSON objects, each with a `cmd` field naming what it is, produced
-while the command ran. A line produced later (a long command) arrives as the notification
-`_p2pact/report` with `{"line": <line>}` on stream 0. Lines with an unknown `cmd` are skipped.
-A failure the person should see arrives as the line `{"cmd": "alert", "id": "<sessionId>",
-"text": "…"}`. The result is `{"lines": []}` when there is nothing to report.
+**9.3 Results.** Every method of §10 takes params as listed and answers with a typed result
+(the fields are listed per method in §10). Unknown fields are ignored. Failures:
+
+- A refused or unknown method is an error as in §6 / `-32601`.
+- `image` and `diff` report their own failure in the result as `error` (the values listed
+  there); the other read methods have none.
+- A write method that fails answers `{"ok": false, "error": "<text>"}`.
+
+For older clients the result also carries `lines`: JSON objects, each with a `cmd` field naming
+what it is, produced while the command ran (the phone-line shape of the reference
+implementation). A device sends both: typed fields and `lines` in one result, so a client
+reads whichever it knows; `lines` with an unknown `cmd` are skipped. New clients ignore `lines`.
+
+Some content takes seconds (the agent's commands, the agents' models, a page of history).
+Completeness is negotiated by `initialize` `_meta.p2pact.v` (§8):
+
+- `v >= 2` — the device answers only when the content is ready: the typed fields are complete
+  and a method that waits never sends `_p2pact/report` for its own content. A later refinement
+  (e.g. the `count` of `history` items) may still arrive as `_p2pact/report`
+  `{"line": <line>}` on stream 0; ignore it.
+- no `v` (or 1) — the device answers at once with what is ready (typed fields of a method
+  whose content is late are empty: `[]`, `{}`), and the late content arrives as the line in
+  the notification `_p2pact/report` `{"line": <line>}` on stream 0, as before.
+
+A failure the person should see arrives, besides `ok: false`, as the line `{"cmd": "alert",
+"id": "<sessionId>", "text": "…"}` in `lines`.
 
 ## 10. Extension methods
 
 Level in brackets: *read* works for a read-only client (§6), *write* needs write access. Params
-are those of the method; `sessionId` is a session of `session/list`.
+are those of the method; `sessionId` is a session of `session/list`. "Result" lists the typed
+fields (§9.3); `lines` is always there besides.
 
 - `_p2pact/older` *(read)* — earlier messages of a long conversation. Params `sessionId`,
-  `before` (the `seq` of the oldest message the client has). Line `{"cmd": "older", "id",
-  "messages": [{"seq", "role": "user" | "assistant" | "tool", "text", "time", "images"?}],
-  "more": bool}` — the page just before `before`, oldest first; `more` — there are still
-  earlier ones.
+  `before` (the `seq` of the oldest message the client has). Result `{"messages": [{"seq",
+  "role": "user" | "assistant" | "tool", "text", "time", "images"?}], "more": bool}` — the page
+  just before `before`, oldest first; `more` — there are still earlier ones.
 - `_p2pact/commands` *(read)* — the agent's slash commands of this chat, for completion in the
-  input field. Params `sessionId`. Late line `{"cmd": "commands", "id", "list": [{"name",
-  "desc"?, "hint"?, "args"?: [{"value", "desc"?}]}]}` (the device asks the agent, it takes seconds).
+  input field. Params `sessionId`. Result `{"commands": [{"name", "desc"?, "hint"?, "args"?:
+  [{"value", "desc"?}]}]}` (the device asks the agent, it takes seconds).
 - `_p2pact/files` *(read)* — files of the chat's folder matching a query (for `@file`
-  completion). Params `sessionId`, `query`. Line `{"cmd": "files", "id", "query", "list":
-  ["<relative path>", …]}` (up to 50).
+  completion). Params `sessionId`, `query`. Result `{"files": ["<relative path>", …], "query"}`
+  (up to 50).
 - `_p2pact/history` *(read)* — closed conversations of the agents on the device, newest first,
   for a "History" screen. Params `query` (text search; empty — all), `offset` (number, default
-  0 = start; a page is up to 60 items). Line `{"cmd": "history", "query", "from", "total", "list":
-  [{"id", "agent", "dir", "project"?, "title", "updated" (ms), "count"?, "open"?}], "partial"?}`;
-  `count` may arrive in a second line with the same `from` that replaces the first. `open`: the
+  0 = start; a page is up to 60 items). Result `{"items": [{"id", "agent", "dir", "project"?,
+  "title", "updated" (ms), "count"?, "open"?}], "query", "from", "total", "cursor"?,
+  "partial"?}`; `cursor` is the `offset` of the next page and absent on the last page. `count`
+  may be missing at first and arrive in a later `_p2pact/report` line; `open`: the
   conversation is in `session/list` now.
 - `_p2pact/history_open` *(write)* — bring a closed conversation back into `session/list` as
   `closed` so it can be loaded and continued. Params `sessionId` (the `id` of a history item).
-  No lines; an error comes as the alert line.
+  Result `{"ok": true}`.
 - `_p2pact/projects` *(read)* — folders to start a chat in: recent ones and folders grouped by
-  project. Params `cwd` (an extra folder to describe, optional). Line `{"cmd": "projects",
-  "dirs": ["<folder>", …], "project_dirs": {"<project>": ["<folder>", …]}, "dir_repos":
-  {"<folder>": "<git remote>"}}`.
+  project. Params `cwd` (an extra folder to describe, optional). Result `{"dirs": ["<folder>",
+  …], "project_dirs": {"<project>": ["<folder>", …]}, "dir_repos": {"<folder>": "<git
+  remote>"}}`.
 - `_p2pact/agents` *(read)* — agents with the models they offer for `session/new` (`model`
-  of §8). No params. Lines `{"cmd": "presets", "list": [{"id", "name", …}]}` — ready-made
-  choices (agent + model), the first is the main one — and `{"cmd": "agents", "list": [{"id",
-  "name", "type", "enabled", "models": ["…"], "default"?}]}` (finding models can take seconds).
+  of §8). No params. Result `{"agents": [{"id", "name", "type", "enabled", "models": ["…"],
+  "default"?}], "presets": [{"id", "name", …}]}` — `presets` are ready-made choices (agent +
+  model), the first is the main one (finding models can take seconds).
 - `_p2pact/image` *(read)* — bytes of an image that a message points to with a `file://`
   `resource_link` (the file is on the agent device). Params `sessionId`, `path` (the path from
-  the link; only images of that chat are served). Line `{"cmd": "image", "id", "path",
-  "data": "<base64>"}` — big images come downscaled — or the same with `"error"`:
+  the link; only images of that chat are served). Result `{"path", "mime", "data": "<base64>"}`
+  — big images come downscaled, `mime` is that of the bytes — or `{"path", "error"}`:
   `not_found` | `no_file` | `too_big` | `bad_image`.
-- `_p2pact/diff` *(read)* — changes in the chat's folder (git). Params `sessionId`. Line
-  `{"cmd": "diff", "id", "files": [{"path", "added", "removed", "status"}], "patch": "<unified
-  diff>", "truncated": bool}`, or with `"error"`: `not_found` | `not_git` | text.
+- `_p2pact/diff` *(read)* — changes in the chat's folder (git). Params `sessionId`. Result
+  `{"files": [{"path", "added", "removed", "status"}], "patch": "<unified diff>", "truncated":
+  bool}`, or `{"error"}`: `not_found` | `not_git` | text.
 - `_p2pact/close` *(write)* — close the chat: it leaves `session/list` (state `closed` in
   `_p2pact/session_changed`), and the agent process of the chat is stopped when the device
-  runs it. Params `sessionId`.
+  runs it. Params `sessionId`. Result `{"ok": true}`.
 - `_p2pact/restart` *(write)* — start the agent of a chat again, same session (a hung or
-  updated agent). Params `sessionId`. Only for chats the device runs itself; others get the
-  alert line.
+  updated agent). Params `sessionId`. Only for chats the device runs itself; others get
+  `{"ok": false, "error"}`. Result `{"ok": true}`.
 - `_p2pact/hide` *(write)* — hide a chat from the list by the person's choice, or show it again;
-  the chat itself goes on. Params `sessionId`, `on` (bool).
+  the chat itself goes on. Params `sessionId`, `on` (bool). Result `{"ok": true}`.
 
 Examples of every message: `contract/tools/p2pact.chat/` in the reference implementation
 (github.com/aidarbn/nomad-code), one JSON file per message.
