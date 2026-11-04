@@ -321,8 +321,11 @@ stream. Numbers are varints (usually 1–2 bytes).
     not know the sender's list yet (it restarted, or the sender did) waits for its hello the
     same way and asks for it (`0.2 info`) rather than waiting for the event alone.
   - **Held messages do not wait forever:** after 15 s the receiver asks again (`0.2 info`,
-    `0.5 dict`); after 2 minutes it drops what it holds, forgets the sender's list and sends its
-    own hello, so both sides learn the lists anew. The sender resends what matters (an
+    `0.5 dict`); a fetch that fails does not drop the message, it stays held. After 2 minutes
+    it drops what it holds, forgets the sender's list and sends its own hello, so both sides
+    learn the lists anew. A message whose slot is an empty id (the
+    sender dropped that dictionary) cannot be read and is dropped at once. Either way the
+    application is told, never silently. The sender resends what matters (an
     application-level acknowledgement), so a stuck dictionary costs a resend, not the link.
   - **The hello and the list are never compressed:** event `0.2`, the result of `0.2 info` and
     event `0.5 dicts` carry what the receiver needs to decompress, so a receiver without the
@@ -333,7 +336,11 @@ stream. Numbers are varints (usually 1–2 bytes).
     anything for it with that dictionary (the reply included) until it announces its list
     again.
   - Up to 4 dictionaries of each kind are kept (common, own for a device, a device's own):
-    an old one lives long enough for packets in flight to decompress.
+    an old one lives long enough for packets in flight to decompress. Everything fetched from a
+    device is the pair's, so that device's list (its common ones, its own for us, the one it got
+    from us) may hold more than 4 that the receiver keeps as one kind: a dictionary the device
+    still lists is never evicted for another it lists (up to 12 of that kind) — otherwise the
+    receiver would evict and fetch them in turn forever, holding messages each time.
 
 ## 6. Messages
 
