@@ -54,7 +54,26 @@ Layers, bottom up:
 addresses; WebSocket URLs of a relay (`wss://…`, for browsers). Absent elements are `null`; the
 fourth is left out when empty, and a reader takes as many elements as it knows.
 The invite can travel **any way**: QR code, link, text, NFC. It is single-use.
-*(planned)* A short 6-digit code to type by hand, with lookup on the local network.
+
+**Short code** — an invite a person can type. A shows a code, B types it and looks the invite up
+on a relay and on the local network (§7), then pairs with it as usual.
+
+- Code: 8 symbols of Crockford base32 (`0-9A-Z` without `I L O U`, 40 bits), random, shown
+  as `K7Q2-M9PX`. Typed input is normalized: upper case, spaces and `-` dropped, `O`→`0`,
+  `I`/`L`→`1`, `U`→`V`. (Not 6 digits: 20 bits are guessed on a shared relay within the code's life.)
+- `k = PBKDF2-HMAC-SHA256(code, salt "p2pact-code", 100000 rounds, 48 bytes)`; `slot` = `k[0:16]`
+  (as text: 32 lowercase hex), `key` = `k[16:48]`. The rounds make each guess cost what a typed
+  code is worth, for the relay too.
+- `box` = `base64url(nonce ‖ ChaCha20-Poly1305(key, nonce, ad = slot, invite))`, `nonce` — 12
+  random bytes, `invite` — the `p2pact1.…` string, its own `exp` at most 10 minutes.
+- A publishes the box under the slot on its relay (§3, `put`) and on the local network (§7) for
+  the invite's life, and withdraws it once B joined or the code is closed. A new code — a new
+  invite. B with no relay hint looks on the relay it knows (an app ships one).
+- **Low entropy.** Whoever has the code — or guessed it — gets the invite; the code only finds A.
+  A treats a newcomer by code like one with `wants` that its person has not answered: nothing
+  but tool `0` until the person confirms (above). A shows its person, and B its own, a check
+  both compute — e.g. words from `hash(secret ‖ key_A ‖ key_B)`: an impostor that joined first
+  has another key, so the check differs and the person refuses.
 
 **Pairing handshake** — `Noise_XXpsk2_25519_ChaChaPoly_BLAKE2s`, pre-shared key `secret`.
 B checks that A's key matches the invite; A learns that B had the invite. Both save each other
@@ -103,6 +122,13 @@ once, and any packet may take any road.
   The channel is the first 16 bytes of `HMAC-BLAKE2s(pair_secret, "relay")`: only those two
   know it. Today the relay speaks newline-terminated lines over TLS (a packet is a base64
   line, sides `a`/`b`; see the `relay` package); *(planned)* binary and over UDP.
+  - **Code slots** (§2 short code) — a first line with `op` instead of `channel`; one answer, then
+    the relay closes: `{"relay":1,"op":"put","slot":…,"box":…,"ttl":s,"tok":<32 hex>}` → `{"ok":true}`
+    (a slot held under another `tok` → `{"error":"taken"}`, A picks another code);
+    `{"relay":1,"op":"get","slot":…}` → `{"ok":true,"box":…}` or `{"error":"not found"}`;
+    `{"relay":1,"op":"del","slot":…,"tok":…}` → `{"ok":true}`. Limits: `ttl` ≤ 600 s, box ≤ 2 KB,
+    a slot is read at most 3 times, then gone; `get` — 10 a minute per client address, `put` — 30.
+    A relay without slots answers `{"error":"bad hello"}`: B falls back to the local network.
   - **Relay over WebSocket** — for a browser, which has no sockets and cannot pin a certificate.
     The same line protocol, one WebSocket message (text) per line, the trailing newline
     optional; the relay shares its channels with the TLS listener, so a browser on `wss://` and a
@@ -405,8 +431,14 @@ packets with names instead of numbers.
 ## 7. Paths
 
 - **Hints** — where to find a device: UDP/TCP addresses, a relay. From the invite, from the
-  hello (every device reports its new addresses over any working road), *(planned)* from
-  local discovery (mDNS `_p2pact._udp`).
+  hello (every device reports its new addresses over any working road), from local discovery.
+- **Local discovery** — DNS-SD over mDNS, service `_p2pact._udp`: instance — the device name,
+  port — its UDP port, TXT `v=1`, `a=<address>`. While a short code is open (§2) the record also
+  carries `t=<slot>` and the box in pieces `b0=`, `b1=`, … of at most 200 characters, joined in
+  order. B with a code browses for a few seconds, takes the record whose `t` is its slot and
+  opens the box; at the same time it asks the relay, and the first invite found wins. Records
+  of known devices (`a`) add their addresses to the hints. A device that cannot use mDNS
+  (no permission, no daemon) relies on the relay.
 - **Live road** — something arrived on it within 60 s.
 - **Choice** — every packet takes the road the current session was heard on last; a better
   kind (UDP before TCP before relay before an application road; an application road declared
