@@ -155,18 +155,23 @@ once, and any packet may take any road.
     wait for a dictionary.
   - **X forwards** a `0.7` only when its sender (`from`), `to` and X are three different
     devices it trusts, the pair has its consent, it has a live road to both that is not itself
-    a road via a third device (one hop: no chains, no loops), its queue to `to` holds fewer
-    than 64 parts (its own traffic goes first), and the direction `from` → `to` is within the
-    rate limit — 256 KB/s with bursts of 64 KB unless its application sets another. Anything
-    else it drops silently: the packet's own session resends it, or another road carries it.
+    a road via a third device (one hop: no chains, no loops), and its queue to `to` holds
+    fewer than 128 parts (its own traffic goes first). Anything else it drops silently: the
+    packet's own session resends it, or another road carries it.
+  - **Rate.** Each direction `from` → `to` is shaped by a token bucket: 256 KB/s with bursts
+    of 64 KB, unless X's application sets another rate. A packet over the rate waits at X, up
+    to 64 KB per direction, and goes as the bucket refills (the queue it builds slows the
+    pair's congestion control, §5); past that it is dropped.
   - **Receiving.** B takes a `0.8` only from a device whose hello listed `from` for B, over a
     road that is not via a third device. The packet is then handled as one that arrived on the
     road "via X" from `from`, like on any road: a handshake names the device (silence if B
     does not trust it), a data packet finds its session, and answers go back on the road they
     came on — as a `0.7` to X. A device sends on the road via X to every device X lists for
     it, as on that device's hints, and starts a session over it when it has none.
-  - The road via X loses nothing that X did not drop (X's sessions deliver the events), so
-    delivery treats it as a reliable road (§5). §7 ranks it with an application road.
+  - The road via X keeps order but may drop (X's limits), so delivery treats it as UDP: a
+    congestion window and loss detection apply (§5). A device also drops what it would send
+    through X while its own queue to X holds 128 parts or more. §7 ranks the road with an
+    application road.
 - **Application roads** — a link the application opens and the node cannot: Bluetooth LE,
   a serial line, a pipe to another program. The application hands the node a way to send and
   gives it what arrives; the node treats it like any other road. One is either
