@@ -70,10 +70,40 @@ agent announced `loadSession`) and gets the history again as `session/update` no
 **Listing.** A client needs the device's chats, also those started elsewhere (in a terminal,
 from another device). The agent device answers ACP's `session/list` (cursor, `cwd`) with every
 session it can load, and adds under `_meta.p2pact` of each: `agent`, `title`, `state`
-(`working` | `waiting` — waits for the person | `idle` | `closed`), `updatedAt`. When a session
+(`working` | `waiting` — waits for the person | `idle` | `closed`), `updatedAt`, and — for chats
+the device drives itself — `options`, `effort`, `continuedFrom` (§4.1). When a session
 appears, changes state or closes, the device sends event `1.1 notify` with
 `{"method": "_p2pact/session_changed", "params": {<the same entry>}}` to every client that has
 called `initialize` in this session of the core.
+
+### 4.1 Session options, switching agent
+
+Each session carries `options` — what the person can change in it, modeled on ACP *Session
+Config Options*: a list of `{"id", "name", "category", "current", "values": [{"id", "name",
+"description"?}]}`. `category` is `model`, `effort` (how hard the model thinks: Claude `low` …
+`max`, Codex `minimal` … `xhigh`; ACP's `thought_level` is reported as `effort`) or another
+string a client may show generically or skip. `current` is a value `id`; the value `default`
+means "the agent's own default" (the choice is not pinned). The device builds the list from what
+the agent itself reports (Claude Code: models, and per model the efforts it supports; ACP agents:
+`models` / `configOptions` of `session/new` and `session/load`, and their update
+notifications), and falls back to the models announced in `_p2pact/agents` when the agent says
+nothing. The values of `effort` follow the current `model`. `options` sits in the session entry
+(`_meta.p2pact.options`, §4), so a client draws its pickers without another request; a change
+arrives as `_p2pact/session_changed`. The entry also carries `effort` (the pinned effort, empty —
+the default) and `continuedFrom` (below).
+
+- `session/set_option` *(write)* — change one option. Params `{"sessionId", "optionId",
+  "value"}` (`value` — a value `id`, or `default` to drop the choice). Result `{}`; ACP errors:
+  `-32602` unknown option or value, `-32603` the agent refused. `optionId` `model` is the same as
+  `session/set_model`, which stays. A change reaches a running agent at once when the agent can
+  take it live; otherwise it applies at the next turn boundary (the device restarts the agent
+  process between turns, never in the middle of one).
+- `session/continue_with` *(write)* — continue a chat with another agent ("company"). Params
+  `{"sessionId", "agent", "model"?, "effort"?}`. The device creates a **new** session in the same
+  folder with the target agent; its first message is a short hand-off built by the device without
+  calling a model: the title, a recap of the last turns, and the id of the source session. The
+  source session is untouched. Result `{"sessionId": "<new id>"}`; the new entry has
+  `continuedFrom` = the source id. Errors: `-32602` unknown agent, `-32603` the chat did not start.
 
 ## 5. Delivery and duplicates
 
@@ -98,7 +128,7 @@ of ACP, so the level is checked on the JSON-RPC method inside:
   and the events (`session/update`, `_p2pact/session_changed`, `_p2pact/request_answered`,
   `_p2pact/report`);
 - *write* — everything else: `session/new`, `session/prompt`, `session/cancel`,
-  `session/set_mode`, `session/set_model`, the extensions marked *write* in §10, and any method
+  `session/set_mode`, `session/set_model`, `session/set_option`, `session/continue_with`, the extensions marked *write* in §10, and any method
   not listed here.
 
 A refused method is the P2PACT error `4`, not a JSON-RPC error. The agent device does not send
@@ -122,7 +152,8 @@ optional for a reader; unknown ones are ignored.
   the response carries `v` too, the highest level the device speaks.
 - `session/new` request: `agent` (§4), `mid` (§5), and the first-chat fields `model` (string,
   one of the agent's models; empty — the agent's default), `text` (string — the first task,
-  sent at once; the client need not send a separate prompt), `perms` (`"skip"` — the agent
+  sent at once; the client need not send a separate prompt), `effort` (string, a value of the
+  agent's `effort` option; empty — the agent's default), `perms` (`"skip"` — the agent
   asks nothing | `"ask"` — safe mode; empty — the device's setting).
 - `session/prompt` request: `mid` (§5). Response: `duplicate: true` — the `mid` was already
   executed, nothing was sent again.
@@ -231,8 +262,10 @@ fields (§9.3); `lines` is always there besides.
   remote>"}}`.
 - `_p2pact/agents` *(read)* — agents with the models they offer for `session/new` (`model`
   of §8). No params. Result `{"agents": [{"id", "name", "type", "enabled", "models": ["…"],
-  "default"?}], "presets": [{"id", "name", …}]}` — `presets` are ready-made choices (agent +
-  model), the first is the main one (finding models can take seconds).
+  "default"?, "efforts"?: ["…"], "default_effort"?}], "presets": [{"id", "name", …}]}` — `presets` are ready-made choices (agent +
+  model), the first is the main one (finding models can take seconds). `efforts` are the effort
+  levels the agent type offers, `default_effort` the one a new chat starts with (absent — the
+  agent's own).
 - `_p2pact/image` *(read)* — bytes of an image that a message points to with a `file://`
   `resource_link` (the file is on the agent device). Params `sessionId`, `path` (the path from
   the link; only images of that chat are served). Result `{"path", "mime", "data": "<base64>"}`
