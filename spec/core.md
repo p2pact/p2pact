@@ -299,6 +299,13 @@ stream. Numbers are varints (usually 1–2 bytes).
   (parts missing, parts received), as many as fit in 60 bytes; it rides along in any
   packet. As in TCP, a standalone ack goes at once for every second part and for
   anything out of order; a lone part waits up to 40 ms for a reply to ride on.
+- **Receive window** — a receiver holds parts up to 8192 past the first gap (the first part
+  not received yet) and drops those further on; the part the gap waits for is always taken.
+  A sender sends a new part only if it is less than 8192 past its lowest unacknowledged one:
+  the parts acknowledged above a gap leave its window, so without this bound it would run
+  ahead of the receiver for as long as the gap stays open. (Bounding the number of parts held
+  instead would drop the missing part itself once 8192 arrived above it, and delivery would
+  stop for good while keepalives kept the session up.)
 - **Retransmission** — the timeout follows the measured round trip (RFC 6298: smoothed RTT
   plus four deviations, 50 ms – 4 s, 500 ms before the first sample) plus the time the link
   needs for the parts queued ahead. It doubles on a retry only while a queue builds, or after
@@ -316,7 +323,8 @@ stream. Numbers are varints (usually 1–2 bytes).
   per round trip. A loss halves it (never below 32) only while a queue builds: a loss
   without one is random and says nothing about congestion. While a queue builds, at most
   twice the bandwidth-delay product (in bytes) is in flight, the bandwidth being measured
-  from acks (as in BBR). On a reliable road (TCP, a relay) there is no window of our own.
+  from acks (as in BBR). On a reliable road (TCP, a relay) there is no congestion window of our own,
+  only the receive window.
 - **Slow application roads** (§3: Bluetooth) — a window of 32 parts is 35 KB, a second or
   more of such a link, and the round trip of a small packet says nothing about the queue a
   burst builds in it (over a pipe with no latency, a rate measured from it is many times the
