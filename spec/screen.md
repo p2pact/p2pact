@@ -93,6 +93,12 @@ All are *view*.
 - `screen/road` `{id, road}` — stream 0: the road under the stream changed: `lan`, `direct`,
   `relay`. The viewer shows it, and the next frame is a key frame.
 
+A viewer that vanishes (killed, no road) sends nothing, and the protocol has no keepalive for it:
+the source ends the stream when the frames it sent stay unacknowledged and nothing at all is
+heard from the viewer on any road for 3 s (a signal of the transport, not a
+message), so capture stops within about 4 s. A change of road does not end it: packets of the new
+road count as hearing the viewer.
+
 ## 4. Pace
 
 There is no unreliable channel: delivery repeats what is lost (core §5), so a slow road must
