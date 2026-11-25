@@ -53,11 +53,23 @@ spoil the dictionary. This changes nothing on the wire: the message is a normal 
 - `screen/keyframe` `{id}` — the next frame is a key frame. `{}` answer.
 - `screen/close` `{id}` — end the stream. `{}` answer.
 
+*Local* — only from a program on the source's own local socket (a command of the product, not a device of the
+fleet); a device of the fleet gets `-32601`. They manage the source and are for its person:
+
+- `screen/devices` `{}` → `{devices: [{addr, name, os, phone}]}` — the devices the source knows.
+- `screen/consents` `{}` → the standing permissions, the questions waiting and the running streams.
+- `screen/consent` `{device, action, level?}` — `action` `allow|deny|revoke`: allow (a standing permission
+  of `level` `view|control`, answers the waiting question), refuse the waiting question, take the permission back
+  (running streams of the device end).
+- `screen/stop` `{id?}` — end the stream `id`, or all of them.
+
 *Control* (level 2):
 
 - `screen/input` `{id, kind, x, y, button, dx, dy, code, mods, text, at}` — one input, `kind`
   `move|down|up|scroll|key|text`. `x`, `y` — position in the screen, 0..1 of its width and height;
-  `button` — `left|right|middle`; `dx`, `dy` — scroll, in points; `code` — a W3C `KeyboardEvent.code`
+  `button` — `left|right|middle`; `dx`, `dy` — scroll, in points, with the sign of a W3C `wheel` event's
+  `deltaX`, `deltaY` (`dy > 0` — the content moves up, as the page scrolls down); a source whose system counts
+  the other way flips them; `code` — a W3C `KeyboardEvent.code`
   (`KeyA`, `Enter`); `mods` — a list of `shift|ctrl|alt|meta`; `text` — text to type; `at` — when
   the person acted, milliseconds since 1970. `down` and `up` press and release a mouse
   `button` at `x`, `y`, or, with a `code` and no `button`, a key; `key` is a press and a release
