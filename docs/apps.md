@@ -27,6 +27,8 @@ in [`spec/`](../spec); this page is the short path.
   - `p2pact.plugins` — installed plugins: list, log, enable, disable ([plugins.md](../spec/plugins.md)).
   - `p2pact.term` — terminals on the computer: open, watch, type, close ([term.md](../spec/term.md)).
     Write on it is a shell on the computer: ask for it only if you need it.
+  - `p2pact.screen` — the computer's screens as video ([screen.md](../spec/screen.md)): read
+    is to look, write is to type and click too.
   - tools added by plugins, under their own names.
 
 ## Pair
@@ -205,6 +207,9 @@ app can look but not touch, and the computer sends it nothing it cannot answer.
 - **plugins, read:** `plugins/list|log|grants`. **Write:** `plugins/enable|disable`.
 - **term, read:** `term/list`, `term/attach`, `term/detach`, and the output. **Write:**
   `term/open`, `term/input`, `term/resize`, `term/close` — a shell on the computer.
+- **screen, view (read):** `screen/list`, `screen/open` without `control`, `screen/keyframe`,
+  `screen/close`, and the frames. **Control (write):** `screen/open` with `control`,
+  `screen/input` — keys and mouse on the computer.
 - **Never offered over P2PACT** (error `-32601`, or `4` to a read-only app): granting and
   revoking devices, pairing, forgetting devices, and `plugins/install|remove`. They are a
   person at the computer.

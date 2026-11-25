@@ -367,6 +367,9 @@ stream. Numbers are varints (usually 1–2 bytes).
     helping once it has enough of its own. A device that has sent fewer than 8 messages worth
     compressing trains none: what it receives alone does not make a dictionary for what it
     sends. The history stays on the device, like its keys.
+  - **Media is sent as it is.** A message the sender knows is already compressed (video of a
+    screen, `screen.md`) is sent without compression (flag `8` not set) and is not added to the
+    history an own dictionary learns from. Nothing changes for the receiver.
   - **When:** the first at 32 KB of history; a new one each time the history has doubled (up to
     1 MB); then monthly, or when compression of what it sends got 15 % worse than over the first
     32 KB after training (checked once a day). Dictionary size: a quarter of the history,
@@ -586,7 +589,9 @@ Tools given by this spec:
 - `4 p2pact.plugins` — a device's plugins: list, enable, disable, their grants and log;
   install and remove stay on the device: `plugins.md`;
 - `5 p2pact.term` — terminals: shells on the device, opened, watched and typed into from other
-  devices, their output as bytes: `term.md`.
+  devices, their output as bytes: `term.md`;
+- `6 p2pact.screen` — screens: a device's screens seen as H.264 video and, if allowed, driven
+  by keys and mouse; view (level 1) and control (level 2) are granted apart: `screen.md`.
 
 ### 8.1 Permissions
 

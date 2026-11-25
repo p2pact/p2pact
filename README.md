@@ -33,6 +33,8 @@ P2PACT is what carries it between devices.
   book.
 - [`spec/term.md`](spec/term.md) — tool 5: terminals on a computer, opened and typed into from
   other devices.
+- [`spec/screen.md`](spec/screen.md) — tool 6: screens of a computer seen as video and driven
+  from other devices; view and control are separate levels.
 - [`dict/common-1.zdict`](dict/common-1.zdict) — the common compression dictionary, trained on
   OpenAssistant oasst2 (Apache-2.0); used until a device has trained its own.
 
