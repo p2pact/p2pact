@@ -25,8 +25,11 @@ Codes: `-32602` params, `-32601` no such method, `-32000` failed, and those of ย
 
 **Streams.** `screen/frame` and `screen/keyframe` of a viewing go on the stream numbered from
 BLAKE2s(`id` + `"/v"`), `screen/input` on the stream numbered from BLAKE2s(`id`): the first 8
-bytes as an unsigned integer, 0 replaced by 1. Everything else goes on stream 0. So a late
-picture never holds up the keys, nor the keys the picture.
+bytes as an unsigned integer, 0 replaced by 1. `screen/open` goes on a stream of its own, a number the
+viewer has not used (say, from BLAKE2s of a fresh random string): the person may take up to 60 s to answer, and
+the calls of one stream run one after another, so on stream 0 the same viewer's `screen/close`, `screen/list`
+and `screen/keyframe` would wait behind it. Everything else goes on stream 0. So a late picture never holds up
+the keys, nor the keys the picture.
 
 **Media is not learnt from.** A `screen/frame` is sent without compression and is not added to
 the history a device trains its dictionary on (core ยง5): video does not shrink and would only
